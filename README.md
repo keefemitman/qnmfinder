@@ -11,4 +11,4 @@ pip install .
 
 ## Examples and tips
 
-Check out the example in [docs/examples/](https://github.com/keefemitman/qnmfinder/docs/examples/example.ipynb)!
+Check out the example in [docs/examples/](https://github.com/keefemitman/qnmfinder/blob/main/docs/examples/example.ipynb)!
