@@ -5,6 +5,7 @@ warnings.filterwarnings("ignore", message=".*ftol*")
 warnings.filterwarnings("ignore", message=".*gtol*")
 
 import copy
+import joblib
 import numpy as np
 
 import qnm
@@ -15,6 +16,8 @@ from . import varpro
 
 import multiprocessing
 from functools import partial
+
+from termcolor import colored
 
 _ksc = qnm.modes_cache
 
@@ -342,6 +345,28 @@ class QNM:
 
         return self.omega, self.C
 
+    def mirror(self):
+        """Compute the mirror mode.
+        """
+        mode = list(self.mode)
+        target_mode = list(self.target_mode)
+        if self.is_first_order_QNM:
+            mode[1] = -mode[1]
+            mode[3] = -mode[3]
+
+            target_mode[1] = -target_mode[1]
+            
+            return QNM(tuple(mode), tuple(target_mode))
+        else:
+            mode1, mode2 = [list(mode) for mode in self.mode]
+            mode1[1] = -mode1[1]
+            mode1[3] = -mode1[3]
+            mode2[1] = -mode2[1]
+            mode2[3] = -mode2[3]
+
+            target_mode[1] = -target_mode[1]
+
+            return QNM([tuple(mode1), tuple(mode2)], tuple(target_mode))
 
 class QNMModel:
     """QNM model for an NR waveform.
@@ -372,6 +397,12 @@ class QNMModel:
 
     def copy(self):
         return copy.deepcopy(self)
+
+    def load(self, filename):
+        return joblib.load(filename)
+        
+    def save(self, filename):
+        joblib.dump(self, filename)
 
     def compute_omegas_and_Cs(self):
         """Compute the QNMs' frequencies and spherical-spheroidal mixing coefficients.
@@ -409,6 +440,52 @@ class QNMModel:
 
         return QNM_model_filtered
 
+    def integrate(self, integration_number=1):
+        """Integrate the model in time `integration_number` times.
+
+        Parameters
+        ----------
+        integration_number : int
+            number of times to integrate.
+        [Default: 1]
+
+        Returns
+        -------
+        QNM_model : ringdown.QNMModel
+            integrated QNMModel.
+        """
+        QNM_model = self.copy()
+
+        integrated = False
+        for QNM in QNM_model.QNMs:
+            try:
+                QNM.A = QNM.A / (-1j * QNM.omega)**integration_number
+                integrated = True
+            except:
+                pass
+
+            try:
+                QNM.A_std = QNM.A_std / abs((-1j * QNM.omega)**integration_number)
+                integrated = True
+            except:
+                pass
+
+            try:
+                QNM.A_time_series = QNM.A_time_series / (-1j * QNM.omega)**integration_number
+                integrated = True
+            except:
+                pass
+                
+        if not integrated:
+            colored(
+                    "********\n" +
+                    "Warning: no amplitude data to change.\n" +
+                    "********",
+                    "red",
+                )
+            
+        return QNM_model
+    
     def compute_waveform(self, h_template, t_i=None, t_f=None, t_ref=0.0):
         """Compute a waveform from self.QNMs.
 
@@ -460,7 +537,7 @@ class QNMModel:
         return h_QNM
 
     def fit_LLSQ(
-        self, h_NR, modes=None, t_i=0.0, t_f=100.0, t_ref=0.0, return_h_NR_fitted=False
+            self, h_NR, modes=None, t_i=0.0, t_f=100.0, t_ref=0.0, compute_fit_errors=False, return_h_NR_fitted=False
     ):
         """Fit QNM model to an NR waveform via linear-least squares.
 
@@ -480,6 +557,9 @@ class QNMModel:
         t_ref : float
             reference time for QNM amplitudes.
             [Default: 0.]
+        compute_fit_errors : bool
+            whether or not to compute the fit L2 norm and mismatch.
+            [Default: False].
         return_h_NR_fitted : bool
             whether or not to return the fitted NR waveform.
             [Default: False].
@@ -566,9 +646,10 @@ class QNMModel:
 
         h_NR_fitted.t += dt
 
-        h_QNM = fit_QNM_model.compute_waveform(h_NR_fitted)
-        fit_QNM_model.L2_norm = utils.compute_L2_norm(h_NR_fitted, h_QNM, modes=modes)
-        fit_QNM_model.mismatch = utils.compute_mismatch(h_NR_fitted, h_QNM, modes=modes)
+        if compute_fit_errors:
+            h_QNM = fit_QNM_model.compute_waveform(h_NR_fitted)
+            fit_QNM_model.L2_norm = utils.compute_L2_norm(h_NR_fitted, h_QNM, modes=modes)
+            fit_QNM_model.mismatch = utils.compute_mismatch(h_NR_fitted, h_QNM, modes=modes)
 
         if return_h_NR_fitted:
             return fit_QNM_model, h_NR_fitted
@@ -734,6 +815,9 @@ class QNMModel:
         t_ref : float
             reference time for QNM amplitudes.
             [Default: 0.]
+        compute_fit_errors : bool
+            whether or not to compute the fit L2 norm and mismatch.
+            [Default: False]
         N_free_frequencies : int
             number of free frequencies to include in the varpro fit;
             if N_free_frequencies != 0, modes can only be one mode.

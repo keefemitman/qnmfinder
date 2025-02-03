@@ -22,21 +22,27 @@ class QNMModelBuilder:
     ----------
     h_NR : scri.WaveformModes
         NR waveform to fit to.
+    M_total : float
+        total Christodoulou mass of the system.
     M_f : float
-        remnant mass.
+        remnant Christodoulou mass.
     chi_f : float
         remnant dimensionless spin magnitude.
     t_i : float
-        earliest time (relative to peak luminosity) to fit.
+        earliest time (relative to peak of psi4) to fit.
         [Default: 0.]
     t_f : float
         latest time (relative to peak luminsoity) to fit.
         [Default: 100.]
     t_0_f : float
-        latest start time (relative to peak luminosity) to fit.
+        latest start time (relative to peak of psi4) to fit.
         [Default: 80.]
     d_t_0 : float
         spacing between t_i and t_0_f to iterate over.
+        [Default: 1.]
+    d_t_0_search : float
+        step size to take backwards in fitting start times
+        while performing reverse search.
         [Default: 1.]
     ell_min_NR : int
         minimum QNM \ell value to consider.
@@ -50,6 +56,10 @@ class QNMModelBuilder:
     mode_power_tol : float
         lowest unmodeled power to consider.
         [Default: 0.]
+    fit_news : bool
+        fit the news instead of the strain;
+        returned amplitudes will still be for the strain.
+        [Default: True]
     ell_min_QNM : int
         minimum QNM \ell value to consider.
         [Default: 2]
@@ -59,6 +69,9 @@ class QNMModelBuilder:
     N_max : int
         maximum overtone value to consider.
         [Default: 4]
+    try_mirrors : bool
+        whether or not to try adding the mirror QNM for each QNM added.
+        [Default: True]
     include_2nd_order_QNMs : bool
         whether or not to include 2nd order QNMs
         [Default: True]
@@ -67,7 +80,7 @@ class QNMModelBuilder:
         as a component of a 2nd order QNM.
         [Default: True]
     t_ref : float
-        reference time (relative to peak luminosity) for QNM amplitudes.
+        reference time (relative to peak of psi4) for QNM amplitudes.
         [Default: 0.]
     allow_more_than_one_free_frequency : bool
         whether or not to allow the use of two free frequencies if one fails.
@@ -83,11 +96,14 @@ class QNMModelBuilder:
         [Default: -min_t_0_window_factor / QNM.omega.imag.]
     min_t_0_window_factor : float
         factor by which to change the minimum stable window.
-        [Default: 0.5]
+        [Default: 1.0]
     reset_after_adding_QNM : bool
         whether or not to reset the fitting start time iteration
         after successfully adding a new QNM to the model.
         [Default: True]
+    preexisting_model : ringdown.QNM_model
+        QNM model to build on top of.
+        [Default: None]
     n_procs : int
         number of cores to use; if 'auto', optimal number based on the number of fit start times;
         if None, maximum number of cores; if -1, no multiprocessing is performed.
@@ -100,28 +116,33 @@ class QNMModelBuilder:
     def __init__(
         self,
         h_NR,
+        M_total,
         M_f,
         chi_f,
         t_i=0,
         t_f=100,
         t_0_f=80,
-        d_t_0=1,
+        d_t_0=1.,
+        d_t_0_search=1.,
         ell_min_NR=2,
         ell_max_NR=5,
         modes=None,
         mode_power_tol=0.0,
+        fit_news=True,
         ell_min_QNM=2,
         ell_max_QNM=5,
         N_max=4,
+        try_mirrors=True,
         include_2nd_order_QNMs=True,
         require_1st_order_QNM_existence=True,
         t_ref=0.0,
         allow_more_than_one_free_frequency=True,
         frequency_tolerance=1.0e-1,
-        CV_tolerance=5.0e-2,
+        CV_tolerance=2.0e-2,
         min_t_0_window=None,
         min_t_0_window_factor=0.5,
         reset_after_adding_QNM=True,
+        preexisting_model=None,
         n_procs="auto",
         verbose=False,
     ):
@@ -143,21 +164,41 @@ class QNMModelBuilder:
         if not modes is None and require_1st_order_QNM_existence:
             print(
                 colored(
-                    "********\n"
-                    + "Warning: requiring 1st order QNM existence for 2nd order QNMs "
-                    + "with modes not None may miss 2nd order QNMs.\n"
-                    + "********",
+                    "********\n" +
+                    "Warning: requiring 1st order QNM existence for 2nd order QNMs " +
+                    "with modes not None may miss 2nd order QNMs.\n" +
+                    "********",
                     "red",
                 )
             )
 
         self.h_NR = h_NR.copy()
+        self.M_total = M_total
         self.M_f = M_f
         self.chi_f = chi_f
         self.t_i = t_i
         self.t_f = t_f
         self.t_0_f = t_0_f
+        if d_t_0 < min(np.diff(self.h_NR.t)):
+            print(
+                colored(
+                    "********\n" +
+                    f"Warning: d_t_0 = {d_t_0} < h_NR's min dt = {min(np.diff(self.h_NR.t))}\n" +
+                    "********",
+                    "red",
+                )
+            )
         self.d_t_0 = d_t_0
+        if d_t_0_search < min(np.diff(self.h_NR.t)):
+            print(
+                colored(
+                    "********\n" +
+                    f"Warning: d_t_0_search = {d_t_0_search} < h_NR's min dt = {min(np.diff(self.h_NR.t))}\n" +
+                    "********",
+                    "red",
+                )
+            )
+        self.d_t_0_search = d_t_0_search
         self.ell_min_NR = ell_min_NR
         self.ell_max_NR = ell_max_NR
         self.modes = modes
@@ -165,15 +206,17 @@ class QNMModelBuilder:
         if self.mode_power_tol != 0.0:
             print(
                 colored(
-                    "********\n"
-                    + "Warning: mode power tolerance not yet implemented.\n"
-                    + "********",
+                    "********\n" +
+                    "Warning: mode power tolerance not yet implemented.\n" +
+                    "********",
                     "red",
                 )
             )
+        self.fit_news = fit_news
         self.ell_min_QNM = ell_min_QNM
         self.ell_max_QNM = ell_max_QNM
         self.N_max = N_max
+        self.try_mirrors = try_mirrors
         self.include_2nd_order_QNMs = include_2nd_order_QNMs
         self.require_1st_order_QNM_existence = require_1st_order_QNM_existence
         self.t_ref = t_ref
@@ -184,10 +227,10 @@ class QNMModelBuilder:
         self.min_t_0_window_factor = min_t_0_window_factor
         self.reset_after_adding_QNM = reset_after_adding_QNM
         self.n_procs = n_procs
-
         self.verbose = verbose
 
-        # fix NR waveform so t_peak = time of peak luminosity
+        # fix NR waveform so t_peak = time of peak of psi4
+        self.h_NR.t *= self.M_total
         self.h_NR.t -= self.compute_t_peak()
         self.h_NR = self.h_NR[
             np.argmin(abs(self.h_NR.t - self.t_i)) : np.argmin(
@@ -197,8 +240,16 @@ class QNMModelBuilder:
             self.ell_min_NR : self.ell_max_NR + 1,
         ]
 
+        if self.fit_news:
+            h_NR_news = self.h_NR.copy()
+            h_NR_news.data = h_NR_news.data_dot
+            h_NR_news.dataType = scri.hdot
+            self.h_NR_fit = h_NR_news
+        else:
+            self.h_NR_fit = self.h_NR.copy()
+
         # construct t0s
-        self.t_0s = np.arange(t_i, t_0_f + d_t_0, d_t_0)
+        self.t_0s = np.arange(self.t_i, self.t_0_f + self.d_t_0, self.d_t_0)
 
         if self.n_procs == "auto":
             if self.t_0s.size <= 20:
@@ -207,20 +258,28 @@ class QNMModelBuilder:
                 self.n_procs = None
 
         # initialize QNM model
-        self.update_model(ringdown.QNMModel(self.M_f, self.chi_f))
+        if preexisting_model is None:
+            self.update_model(ringdown.QNMModel(self.M_f, self.chi_f))
+        else:
+            is_stable, QNM_model = self.is_model_stable(QNM_model)
+            if not is_stable:
+                raise ValueError("Preexisting model is not stable!")
+            else:
+                self.update_model(QNM_model)
 
-        return
-
+                
     def compute_t_peak(self):
-        """Compute the time of peak luminosity."""
-        news = MT_to_WM(WM_to_MT(self.h_NR).dot, dataType=scri.hdot)
+        """Compute the time of peak of psi4."""
+        psi4 = self.h_NR.copy()
+        psi4.data = psi4.data_ddot
+        psi4.dataType = scri.hdot
 
-        index = np.argmax(news.norm())
+        index = np.argmax(psi4.norm())
         index = max(2, min(len(self.h_NR.t) - 3, index))
 
         # Fit 5 points with a 2nd-order polynomial
         test_times = self.h_NR.t[index - 2 : index + 2 + 1] - self.h_NR.t[index]
-        test_funcs = news.norm()[index - 2 : index + 2 + 1]
+        test_funcs = psi4.norm()[index - 2 : index + 2 + 1]
 
         x_vecs = np.array([np.ones(5), test_times, test_times**2.0])
         y_vec = np.array([test_funcs.dot(v1) for v1 in x_vecs])
@@ -247,39 +306,57 @@ class QNMModelBuilder:
 
         self.N_free_frequencies = 1
 
-        self.update_model_waveform()
+        self.compute_model_waveform()
 
-        self.update_model_errors()
+    def compute_model_waveform(self):
+        """Update self.h_QNM_fit and self.h_residual_fit to reflect the content of self.QNM_model."""
+        self.h_QNM_fit = self.QNM_model.compute_waveform(self.h_NR_fit)
 
-    def update_model_waveform(self):
-        """Update self.h_QNM and self.h_residual to reflect the content of self.QNM_model."""
-        self.h_QNM = self.QNM_model.compute_waveform(self.h_NR)
+        self.h_residual_fit = self.h_NR_fit.copy()
+        self.h_residual_fit.data -= self.h_QNM_fit.data
 
-        self.h_residual = self.h_NR.copy()
-        self.h_residual.data -= self.h_QNM.data
-
-        self.update_model_errors()
-
-    def update_model_errors(self):
+    def compute_model_errors(self):
         """Update self.L2_norms and self.mismatches to reflect the content of self.residual."""
         L2_norms = []
         mismatches = []
         for t_0 in self.t_0s:
             L2_norm = utils.compute_L2_norm(
-                self.h_NR, self.h_QNM, t_i=t_0, modes=self.modes
+                self.h_NR_fit, self.h_QNM_fit, t_i=t_0, modes=self.modes
             )
             L2_norms.append(L2_norm)
 
             mismatch = utils.compute_mismatch(
-                self.h_NR, self.h_QNM, t_i=t_0, modes=self.modes
+                self.h_NR_fit, self.h_QNM_fit, t_i=t_0, modes=self.modes
             )
             mismatches.append(mismatch)
 
-        self.L2_norms = L2_norms
-        self.mismatches = mismatches
+        if not self.fit_news:
+            self.L2_norms = L2_norms
+            self.mismatches = mismatches
+        else:
+            self.L2_norms_fit = L2_norms
+            self.mismatches_fit = mismatches
 
-        self.L2_norms_int = integrate(L2_norms, self.t_0s)[-1]
-        self.mismatches_int = integrate(mismatches, self.t_0s)[-1]
+        if self.fit_news:
+            L2_norms = []
+            mismatches = []
+
+            QNM_model = self.QNM_model.integrate()
+            h_QNM = QNM_model.compute_waveform(self.h_NR)
+            
+            for t_0 in self.t_0s:
+                L2_norm = utils.compute_L2_norm(
+                    self.h_NR, h_QNM, t_i=t_0, modes=self.modes
+                )
+                L2_norms.append(L2_norm)
+                
+                mismatch = utils.compute_mismatch(
+                    self.h_NR, h_QNM, t_i=t_0, modes=self.modes
+                )
+                mismatches.append(mismatch)
+
+            self.L2_norms = L2_norms
+            self.mismatches = mismatches
 
     def find_most_unmodeled_mode(self, t_0=None):
         """Find the mode which has the most unmodeled power.
@@ -298,27 +375,27 @@ class QNMModelBuilder:
         if t_0 is None:
             t_0 = self.t_i
 
-        idx_t_0 = np.argmin(abs(self.h_NR.t - t_0))
+        idx_t_0 = np.argmin(abs(self.h_NR_fit.t - t_0))
 
         if not self.modes is None:
             mode_indices = []
-            for L, M in self.h_NR.LM:
+            for L, M in self.h_NR_fit.LM:
                 if (L, M) in self.modes:
                     mode_indices.append(True)
                 else:
                     mode_indices.append(False)
         else:
-            mode_indices = [True] * self.h_NR.LM.shape[0]
+            mode_indices = [True] * self.h_NR_fit.LM.shape[0]
         mode_indices = np.array(mode_indices)
 
         unmodeled_power = integrate(
-            abs(self.h_residual.data[idx_t_0:, mode_indices]) ** 2,
-            self.h_residual.t[idx_t_0:],
+            abs(self.h_residual_fit.data[idx_t_0:, mode_indices]) ** 2,
+            self.h_residual_fit.t[idx_t_0:],
             axis=0,
         )[-1]
 
         LMs_ranked = [
-            x for _, x in sorted(zip(unmodeled_power, self.h_residual.LM[mode_indices]))
+            x for _, x in sorted(zip(unmodeled_power, self.h_residual_fit.LM[mode_indices]))
         ][::-1]
 
         LMs_and_power = [
@@ -494,7 +571,7 @@ class QNMModelBuilder:
         QNM_model_filtered = self.QNM_model.filter_based_on_mode(mode)
 
         fit_QNM_model_filtered = QNM_model_filtered.fit(
-            self.h_NR, [mode], t_0, self.t_f, N_free_frequencies=N_free_frequencies
+            self.h_NR_fit, [mode], t_0, self.t_f, N_free_frequencies=N_free_frequencies
         )
         if fit_QNM_model_filtered is None:
             return False
@@ -517,7 +594,7 @@ class QNMModelBuilder:
             return False
 
     def compute_largest_stable_window(self, QNM):
-        """Find the largest stable window.
+        """Find the largest stable window that meets self.CV_tolerance.
 
         Parameters
         ----------
@@ -528,16 +605,22 @@ class QNMModelBuilder:
         -------
         largest_window : tuple
             window over which the QNM has a CV below self.CV_tolerance.
+        true_min_CV : float
+            coefficient of variation over largest_window.
         """
+        best_CV = np.inf
         true_min_CV = np.inf
         largest_window = (0.0, 0.0)
 
         d_window_size = np.diff(self.t_0s)[0]
         min_t_0_window = self.min_t_0_window
         if min_t_0_window is None:
-            min_t_0_window = (
-                round(-self.min_t_0_window_factor / QNM.omega.imag / d_window_size)
-                * d_window_size
+            min_t_0_window = max(
+                4 * d_window_size,
+                (
+                    round(-self.min_t_0_window_factor / QNM.omega.imag / d_window_size)
+                    * d_window_size
+                )
             )
         for window_size in np.arange(
             min_t_0_window,
@@ -548,7 +631,7 @@ class QNMModelBuilder:
             min_CV = np.inf
 
             while self.t_0s[idx1] + window_size < self.t_0s[-1]:
-                idx2 = np.argmin(abs(self.t_0s - (self.t_0s[idx1] + window_size))) + 1
+                idx2 = np.argmin(abs(self.t_0s - (self.t_0s[idx1] + window_size)))
                 CV = np.std(QNM.A_time_series[idx1:idx2]) / np.mean(
                     abs(QNM.A_time_series[idx1:idx2])
                 )
@@ -556,19 +639,18 @@ class QNMModelBuilder:
                     min_CV = CV
                     best_idx1 = idx1
                     best_idx2 = idx2
+                if CV < best_CV:
+                    best_CV = min_CV
                 idx1 += 1
 
             if min_CV < self.CV_tolerance:
                 true_min_CV = min_CV
                 largest_window = (self.t_0s[best_idx1], self.t_0s[best_idx2])
-                continue
-            else:
-                break
 
-        if largest_window == (0.0, 0.0):
-            return largest_window, min_CV
-        else:
+        if true_min_CV != np.inf:
             return largest_window, true_min_CV
+        else:
+            return largest_window, best_CV
 
     def analyze_model_time_series(self, QNM_model):
         """Analyze time series data of model, i.e.,
@@ -585,6 +667,7 @@ class QNMModelBuilder:
         QNM_model : ringdown.QNMModel
             model of QNMs with analyzed time series data.
         """
+        QNM_model.compute_omegas_and_Cs()
         for QNM in QNM_model.QNMs:
             largest_stable_window, CV = self.compute_largest_stable_window(QNM)
             QNM.largest_stable_window = largest_stable_window
@@ -636,7 +719,7 @@ class QNMModelBuilder:
 
         # fit over t_0s
         fit_QNM_model = QNM_model.fit(
-            self.h_NR, modes=self.modes, t_i=self.t_0s, n_procs=self.n_procs
+            self.h_NR_fit, modes=self.modes, t_i=self.t_0s, n_procs=self.n_procs
         )
 
         # find largest stable windows and measure amplitudes
@@ -661,6 +744,11 @@ class QNMModelBuilder:
         if np.all(np.diff(QNM_stable_windows) > 0):
             if self.verbose:
                 print(colored("** model passed stability test!", "green"))
+                print(
+                    "* new CV(s):",
+                )
+                for QNM in QNM_model.QNMs[-d_N_QNMs:]:
+                    print(QNM.mode, "->", QNM.CV)
             self.previous_QNM_stable_windows = QNM_stable_windows
             return True, QNM_model
         else:
@@ -670,7 +758,7 @@ class QNMModelBuilder:
                     "* previous windows passed:",
                     np.all(np.diff(QNM_stable_windows)[-d_N_QNMs:] > 0),
                 )
-                for i in range(len(QNM_stable_windows)):
+                for i in range(len(QNM_stable_windows[:-d_N_QNMs])):
                     if not np.diff(QNM_stable_windows[i]) > 0:
                         print(
                             f"{QNM_model.QNMs[i].mode}: {QNM_stable_windows[i]} vs. {self.previous_QNM_stable_windows[i]}"
@@ -689,21 +777,19 @@ class QNMModelBuilder:
                 print()
 
             return False, QNM_model
-
+        
     def build_model(self):
         """Build QNM model."""
         # iterate over fitting start times
-        t_0_idx = self.t_0s.size - 1
-        self.latest_t_0_idx = t_0_idx
+        t_0 = self.t_0_f
+        self.latest_t_0 = t_0
 
         print(
             colored(
                 "***************\n" + "Building Model!\n" + "***************\n", "blue"
             )
         )
-        while t_0_idx >= 0:
-            t_0 = self.t_0s[t_0_idx]
-
+        while t_0 >= self.t_i:
             if self.verbose:
                 print(colored(f"** working on t_0 = {t_0}.\n", "light_blue"))
 
@@ -711,7 +797,7 @@ class QNMModelBuilder:
             mode_to_model, LMs_and_power = self.find_most_unmodeled_mode(t_0)
 
             if self.allow_more_than_one_free_frequency:
-                if t_0_idx == 0 or (
+                if t_0 == self.t_i or (
                     not self.mode_to_model is None
                     and self.mode_to_model != mode_to_model
                 ):
@@ -729,13 +815,13 @@ class QNMModelBuilder:
                             )
                         self.N_free_frequencies = 2
 
-                        t_0_idx = self.latest_t_0_idx
+                        t_0 = self.latest_t_0
 
                         continue
                     else:
                         self.N_free_frequencies = 1
 
-                        self.latest_t_0_idx = t_0_idx
+                        self.latest_t_0 = t_0
 
             if self.verbose:
                 if mode_to_model != self.mode_to_model:
@@ -752,7 +838,7 @@ class QNMModelBuilder:
                 self.mode_to_model, t_0, self.N_free_frequencies
             )
             if not QNM_model:
-                t_0_idx -= 1
+                t_0 -= self.d_t_0_search
                 continue
 
             if [
@@ -766,7 +852,7 @@ class QNMModelBuilder:
                             "red",
                         )
                     )
-                t_0_idx -= 1
+                t_0 -= self.d_t_0_search
                 continue
 
             # check if new QNM model is stable
@@ -775,7 +861,7 @@ class QNMModelBuilder:
                 self.failed_QNM_modes.append(
                     [QNM.mode for QNM in QNM_model.QNMs[-self.N_free_frequencies :]]
                 )
-                t_0_idx -= 1
+                t_0 -= self.d_t_0_search
                 continue
 
             print(colored(f"** new model is", "green"))
@@ -783,12 +869,51 @@ class QNMModelBuilder:
                 print(colored(f"- {QNM.mode}", "green"))
             print()
 
+            N_new_QNMs = self.N_free_frequencies
+
             # update model
             self.update_model(QNM_model)
 
-            t_0_idx = self.latest_t_0_idx
+            # try mirror QNM(s)
+            if self.try_mirrors:
+                QNM_model = QNM_model.copy()
 
-        del self.latest_t_0_idx
+                mirrors_to_examine = False
+                for QNM in QNM_model.QNMs[-N_new_QNMs:]:
+                    QNM_mirror = QNM.mirror()
+                    if QNM_mirror.mode in [QNM.mode for QNM in QNM_model.QNMs]:
+                        continue
+                        
+                    QNM_model.QNMs.append(QNM_mirror)
+
+                    mirrors_to_examine = True
+
+                if mirrors_to_examine:
+                    if self.verbose:
+                        print(colored(f"* examining mirror mode(s):", "light_cyan"))
+                        for QNM in QNM_model.QNMs[-N_new_QNMs:]:
+                            print("-", QNM.mode)
+                            
+                    # check if new QNM model is stable
+                    is_stable, QNM_model = self.is_model_stable(QNM_model)
+                    if not is_stable:
+                        self.failed_QNM_modes.append(
+                            [QNM.mode for QNM in QNM_model.QNMs[-N_new_QNMs :]]
+                        )
+                        t_0 -= self.d_t_0_search
+                        continue
+                    
+                    print(colored(f"** new model is", "green"))
+                    for QNM in QNM_model.QNMs:
+                        print(colored(f"- {QNM.mode}", "green"))
+                    print()
+
+                    # update model
+                    self.update_model(QNM_model)
+
+            t_0 = self.latest_t_0
+
+        del self.latest_t_0
 
     def build_model_iteratively(self):
         """Build QNM model iteratively."""
