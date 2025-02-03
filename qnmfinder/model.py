@@ -12,8 +12,6 @@ import multiprocessing
 
 from termcolor import colored
 
-import matplotlib.pyplot as plt
-
 
 class QNMModelBuilder:
     """Build QNM model for an NR waveform.
@@ -140,7 +138,7 @@ class QNMModelBuilder:
         frequency_tolerance=1.0e-1,
         CV_tolerance=2.0e-2,
         min_t_0_window=None,
-        min_t_0_window_factor=0.5,
+        min_t_0_window_factor=1.0,
         reset_after_adding_QNM=True,
         preexisting_model=None,
         n_procs="auto",
@@ -744,6 +742,11 @@ class QNMModelBuilder:
         if np.all(np.diff(QNM_stable_windows) > 0):
             if self.verbose:
                 print(colored("** model passed stability test!", "green"))
+                print(
+                    "* new window(s):",
+                )
+                for QNM in QNM_model.QNMs[-d_N_QNMs:]:
+                    print(QNM.mode, "->", QNM.largest_stable_window)
                 print(
                     "* new CV(s):",
                 )

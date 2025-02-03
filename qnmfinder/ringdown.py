@@ -13,6 +13,7 @@ from scri.sample_waveforms import modes_constructor
 
 from . import utils
 from . import varpro
+from . import plotting
 
 import multiprocessing
 from functools import partial
@@ -243,7 +244,7 @@ def merge_fit_models(fit_QNM_models, t_0s):
     if fit_QNM_model is None:
         raise ValueError("Varpro failed to fit at every t_0.")
 
-    fit_QNM_model.t_0s = t_0s_in_model
+    fit_QNM_model.t_0s = np.array(t_0s_in_model)
 
     for i, QNM in enumerate(fit_QNM_model.QNMs):
         QNM.A = None
@@ -252,8 +253,8 @@ def merge_fit_models(fit_QNM_models, t_0s):
     for i, non_QNM_sinusoid in enumerate(fit_QNM_model.non_QNM_sinusoids):
         non_QNM_sinusoid.omegas = omegas[:, i]
 
-    fit_QNM_model.L2_norms = L2_norms
-    fit_QNM_model.mismatches = mismatches
+    fit_QNM_model.L2_norms = np.array(L2_norms)
+    fit_QNM_model.mismatches = np.array(mismatches)
 
     return fit_QNM_model
 

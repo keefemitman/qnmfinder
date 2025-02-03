@@ -33,5 +33,6 @@ if __name__=='__main__':
               "Topic :: Scientific/Engineering :: Physics",
               "Topic :: Scientific/Engineering :: Astronomy",
               ],
+          package_data={'': ['style.mplstyle']},
           include_package_data=True,
           zip_safe=False)
