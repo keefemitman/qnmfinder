@@ -8,6 +8,7 @@ from . import utils
 from . import varpro
 
 from importlib.metadata import version
+
 __version__ = version("qnmfinder")
 
 module_dir = os.path.dirname(__file__)

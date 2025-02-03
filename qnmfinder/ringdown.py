@@ -68,74 +68,78 @@ def omega_and_C(mode, target_mode, M_f, chi_f):
 
     return omega, C, ells
 
-def compute_largest_stable_window(QNM, t_0s, CV_tolerance=2.e-2, min_t_0_window=None, min_t_0_window_factor=1.0):
-        """Find the largest stable window that meets self.CV_tolerance.
 
-        Parameters
-        ----------
-        QNM : ringdown.QNM
-            QNM under consideration.
-        t_0s : ndarray
-            time array over which the QNM was fit.
-        CV_tolerance : float
-            minimum coefficient of variation to QNM to be considered stable.
-            [Default: 2.e-2]
-        min_t_0_window : float
-            minimum window over fitting start times to consider.
-            [Default: -min_t_0_window_factor / QNM.omega.imag.]
-        min_t_0_window_factor : float
-            factor by which to change the minimum stable window.
-            [Default: 1.0]
+def compute_largest_stable_window(
+    QNM, t_0s, CV_tolerance=2.0e-2, min_t_0_window=None, min_t_0_window_factor=1.0
+):
+    """Find the largest stable window that meets self.CV_tolerance.
 
-        Returns
-        -------
-        largest_window : tuple
-            window over which the QNM has a CV below CV_tolerance.
-        true_min_CV : float
-            coefficient of variation over largest_window.
-        """
-        best_CV = np.inf
-        true_min_CV = np.inf
-        largest_window = (0.0, 0.0)
+    Parameters
+    ----------
+    QNM : ringdown.QNM
+        QNM under consideration.
+    t_0s : ndarray
+        time array over which the QNM was fit.
+    CV_tolerance : float
+        minimum coefficient of variation to QNM to be considered stable.
+        [Default: 2.e-2]
+    min_t_0_window : float
+        minimum window over fitting start times to consider.
+        [Default: -min_t_0_window_factor / QNM.omega.imag.]
+    min_t_0_window_factor : float
+        factor by which to change the minimum stable window.
+        [Default: 1.0]
 
-        d_window_size = np.diff(t_0s)[0]
-        if min_t_0_window is None:
-            min_t_0_window = max(
-                4 * d_window_size,
-                (
-                    round(-min_t_0_window_factor / QNM.omega.imag / d_window_size)
-                    * d_window_size
-                )
+    Returns
+    -------
+    largest_window : tuple
+        window over which the QNM has a CV below CV_tolerance.
+    true_min_CV : float
+        coefficient of variation over largest_window.
+    """
+    best_CV = np.inf
+    true_min_CV = np.inf
+    largest_window = (0.0, 0.0)
+
+    d_window_size = np.diff(t_0s)[0]
+    if min_t_0_window is None:
+        min_t_0_window = max(
+            4 * d_window_size,
+            (
+                round(-min_t_0_window_factor / QNM.omega.imag / d_window_size)
+                * d_window_size
+            ),
+        )
+    for window_size in np.arange(
+        min_t_0_window,
+        (t_0s[-1] - t_0s[0]) + d_window_size,
+        d_window_size,
+    ):
+        idx1 = 0
+        min_CV = np.inf
+
+        while t_0s[idx1] + window_size < t_0s[-1]:
+            idx2 = np.argmin(abs(t_0s - (t_0s[idx1] + window_size)))
+            CV = np.std(QNM.A_time_series[idx1:idx2]) / np.mean(
+                abs(QNM.A_time_series[idx1:idx2])
             )
-        for window_size in np.arange(
-            min_t_0_window,
-            (t_0s[-1] - t_0s[0]) + d_window_size,
-            d_window_size,
-        ):
-            idx1 = 0
-            min_CV = np.inf
+            if CV < min_CV:
+                min_CV = CV
+                best_idx1 = idx1
+                best_idx2 = idx2
+            if CV < best_CV:
+                best_CV = min_CV
+            idx1 += 1
 
-            while t_0s[idx1] + window_size < t_0s[-1]:
-                idx2 = np.argmin(abs(t_0s - (t_0s[idx1] + window_size)))
-                CV = np.std(QNM.A_time_series[idx1:idx2]) / np.mean(
-                    abs(QNM.A_time_series[idx1:idx2])
-                )
-                if CV < min_CV:
-                    min_CV = CV
-                    best_idx1 = idx1
-                    best_idx2 = idx2
-                if CV < best_CV:
-                    best_CV = min_CV
-                idx1 += 1
+        if min_CV < CV_tolerance:
+            true_min_CV = min_CV
+            largest_window = (t_0s[best_idx1], t_0s[best_idx2])
 
-            if min_CV < CV_tolerance:
-                true_min_CV = min_CV
-                largest_window = (t_0s[best_idx1], t_0s[best_idx2])
+    if true_min_CV != np.inf:
+        return largest_window, true_min_CV
+    else:
+        return largest_window, best_CV
 
-        if true_min_CV != np.inf:
-            return largest_window, true_min_CV
-        else:
-            return largest_window, best_CV
 
 def fit_damped_sinusoid_functions(t, fixed_frequencies, free_frequencies, t_ref=0.0):
     """Damped sinusoid fitting function for varpro.
@@ -415,8 +419,7 @@ class QNM:
         return self.omega, self.C
 
     def mirror(self):
-        """Compute the mirror mode.
-        """
+        """Compute the mirror mode."""
         mode = list(self.mode)
         target_mode = list(self.target_mode)
         if self.is_first_order_QNM:
@@ -424,7 +427,7 @@ class QNM:
             mode[3] = -mode[3]
 
             target_mode[1] = -target_mode[1]
-            
+
             return QNM(tuple(mode), tuple(target_mode))
         else:
             mode1, mode2 = [list(mode) for mode in self.mode]
@@ -436,6 +439,7 @@ class QNM:
             target_mode[1] = -target_mode[1]
 
             return QNM([tuple(mode1), tuple(mode2)], tuple(target_mode))
+
 
 class QNMModel:
     """QNM model for an NR waveform.
@@ -469,7 +473,7 @@ class QNMModel:
 
     def load(self, filename):
         return joblib.load(filename)
-        
+
     def save(self, filename):
         joblib.dump(self, filename)
 
@@ -528,34 +532,36 @@ class QNMModel:
         integrated = False
         for QNM in QNM_model.QNMs:
             try:
-                QNM.A = QNM.A / (-1j * QNM.omega)**integration_number
+                QNM.A = QNM.A / (-1j * QNM.omega) ** integration_number
                 integrated = True
             except:
                 pass
 
             try:
-                QNM.A_std = QNM.A_std / abs((-1j * QNM.omega)**integration_number)
+                QNM.A_std = QNM.A_std / abs((-1j * QNM.omega) ** integration_number)
                 integrated = True
             except:
                 pass
 
             try:
-                QNM.A_time_series = QNM.A_time_series / (-1j * QNM.omega)**integration_number
+                QNM.A_time_series = (
+                    QNM.A_time_series / (-1j * QNM.omega) ** integration_number
+                )
                 integrated = True
             except:
                 pass
-                
+
         if not integrated:
             colored(
-                    "********\n" +
-                    "Warning: no amplitude data to change.\n" +
-                    "********",
-                    "red",
-                )
-            
+                "********\n" + "Warning: no amplitude data to change.\n" + "********",
+                "red",
+            )
+
         return QNM_model
 
-    def analyze_model_time_series(self, CV_tolerance=2.e-2, min_t_0_window=None, min_t_0_window_factor=1.0):
+    def analyze_model_time_series(
+        self, CV_tolerance=2.0e-2, min_t_0_window=None, min_t_0_window_factor=1.0
+    ):
         """Analyze time series data of model, i.e.,
            find the largest stable window for each QNM
            and extract the amplitude over said window.
@@ -578,52 +584,48 @@ class QNMModel:
             model of QNMs with analyzed time series data.
         """
         QNM_model = self.copy()
-        
+
         QNM_model.compute_omegas_and_Cs()
         for QNM in QNM_model.QNMs:
             largest_stable_window, CV = compute_largest_stable_window(
-                QNM,
-                QNM_model.t_0s,
-                CV_tolerance,
-                min_t_0_window,
-                min_t_0_window_factor
+                QNM, QNM_model.t_0s, CV_tolerance, min_t_0_window, min_t_0_window_factor
             )
             QNM.largest_stable_window = largest_stable_window
             QNM.CV = CV
 
             QNM.A = np.mean(
                 QNM.A_time_series[
-                    np.argmin(abs(QNM_model.t_0s - largest_stable_window[0])) : np.argmin(
-                        abs(QNM_model.t_0s - largest_stable_window[1])
-                    )
+                    np.argmin(
+                        abs(QNM_model.t_0s - largest_stable_window[0])
+                    ) : np.argmin(abs(QNM_model.t_0s - largest_stable_window[1]))
                     + 1
                 ].real
             ) + 1j * np.mean(
                 QNM.A_time_series[
-                    np.argmin(abs(QNM_model.t_0s - largest_stable_window[0])) : np.argmin(
-                        abs(QNM_model.t_0s - largest_stable_window[1])
-                    )
+                    np.argmin(
+                        abs(QNM_model.t_0s - largest_stable_window[0])
+                    ) : np.argmin(abs(QNM_model.t_0s - largest_stable_window[1]))
                     + 1
                 ].imag
             )
             QNM.A_std = np.std(
                 QNM.A_time_series[
-                    np.argmin(abs(QNM_model.t_0s - largest_stable_window[0])) : np.argmin(
-                        abs(QNM_model.t_0s - largest_stable_window[1])
-                    )
+                    np.argmin(
+                        abs(QNM_model.t_0s - largest_stable_window[0])
+                    ) : np.argmin(abs(QNM_model.t_0s - largest_stable_window[1]))
                     + 1
                 ].real
             ) + 1j * np.std(
                 QNM.A_time_series[
-                    np.argmin(abs(QNM_model.t_0s - largest_stable_window[0])) : np.argmin(
-                        abs(QNM_model.t_0s - largest_stable_window[1])
-                    )
+                    np.argmin(
+                        abs(QNM_model.t_0s - largest_stable_window[0])
+                    ) : np.argmin(abs(QNM_model.t_0s - largest_stable_window[1]))
                     + 1
                 ].imag
             )
 
         return QNM_model
-    
+
     def compute_waveform(self, h_template, t_i=None, t_f=None, t_ref=0.0):
         """Compute a waveform from self.QNMs.
 
@@ -675,7 +677,14 @@ class QNMModel:
         return h_QNM
 
     def fit_LLSQ(
-            self, h_NR, modes=None, t_i=0.0, t_f=100.0, t_ref=0.0, compute_fit_errors=False, return_h_NR_fitted=False
+        self,
+        h_NR,
+        modes=None,
+        t_i=0.0,
+        t_f=100.0,
+        t_ref=0.0,
+        compute_fit_errors=False,
+        return_h_NR_fitted=False,
     ):
         """Fit QNM model to an NR waveform via linear-least squares.
 
@@ -786,8 +795,12 @@ class QNMModel:
 
         if compute_fit_errors:
             h_QNM = fit_QNM_model.compute_waveform(h_NR_fitted)
-            fit_QNM_model.L2_norm = utils.compute_L2_norm(h_NR_fitted, h_QNM, modes=modes)
-            fit_QNM_model.mismatch = utils.compute_mismatch(h_NR_fitted, h_QNM, modes=modes)
+            fit_QNM_model.L2_norm = utils.compute_L2_norm(
+                h_NR_fitted, h_QNM, modes=modes
+            )
+            fit_QNM_model.mismatch = utils.compute_mismatch(
+                h_NR_fitted, h_QNM, modes=modes
+            )
 
         if return_h_NR_fitted:
             return fit_QNM_model, h_NR_fitted
