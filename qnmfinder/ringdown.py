@@ -13,7 +13,6 @@ from scri.sample_waveforms import modes_constructor
 
 from . import utils
 from . import varpro
-from . import plotting
 
 import multiprocessing
 from functools import partial
