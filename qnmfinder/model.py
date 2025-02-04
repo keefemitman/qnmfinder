@@ -709,7 +709,7 @@ class QNMModelBuilder:
             mode_to_model, LMs_and_power = self.find_most_unmodeled_mode(t_0)
 
             if self.allow_more_than_one_free_frequency:
-                if t_0 == self.t_i or (
+                if abs(t_0 - self.t_i) < self.d_t_0_search or (
                     not self.mode_to_model is None
                     and self.mode_to_model != mode_to_model
                 ):
