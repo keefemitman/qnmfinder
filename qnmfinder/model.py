@@ -271,14 +271,15 @@ class QNMModelBuilder:
         """Compute the time of peak of psi4."""
         psi4 = self.h_NR.copy()
         psi4.data = psi4.data_ddot
-        psi4.dataType = scri.hdot
-
-        index = np.argmax(psi4.norm())
+        psi4.dataType = scri.psi4
+        norm = psi4.norm()
+        
+        index = np.argmax(norm)
         index = max(2, min(len(self.h_NR.t) - 3, index))
 
         # Fit 5 points with a 2nd-order polynomial
         test_times = self.h_NR.t[index - 2 : index + 2 + 1] - self.h_NR.t[index]
-        test_funcs = psi4.norm()[index - 2 : index + 2 + 1]
+        test_funcs = norm[index - 2 : index + 2 + 1]
 
         x_vecs = np.array([np.ones(5), test_times, test_times**2.0])
         y_vec = np.array([test_funcs.dot(v1) for v1 in x_vecs])

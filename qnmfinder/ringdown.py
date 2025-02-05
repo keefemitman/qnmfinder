@@ -24,6 +24,13 @@ _ksc = qnm.modes_cache
 
 def omega_and_C(mode, target_mode, M_f, chi_f):
     """Compute a QNM's frequency and spherical-spheroidal mixing coefficients."""
+    if mode == (0,0,0,0):
+        ells = np.arange(max(2, abs(target_mode[1])), 20 + 1, 1)
+        C = np.zeros_like(ells, dtype=complex)
+        C[np.argmin(abs(ells - target_mode[0]))] = 1.0
+        
+        return 0., C, ells
+    
     if type(mode) is list:
         omega = 0.0
         for ell, m, n, sign in mode:
@@ -69,7 +76,7 @@ def omega_and_C(mode, target_mode, M_f, chi_f):
 
 
 def compute_largest_stable_window(
-    QNM, t_0s, CV_tolerance=2.0e-2, min_t_0_window=None, min_t_0_window_factor=1.0
+    QNM, t_0s, CV_tolerance=2.0e-2, min_t_0_window=None, min_t_0_window_factor=1.0, A_tolerance=1e-6,
 ):
     """Find the largest stable window that meets self.CV_tolerance.
 
@@ -88,6 +95,8 @@ def compute_largest_stable_window(
     min_t_0_window_factor : float
         factor by which to change the minimum stable window.
         [Default: 1.0]
+    A_tolerance : float
+        minimum amplitude to consider physical.
 
     Returns
     -------
@@ -100,24 +109,30 @@ def compute_largest_stable_window(
     true_min_CV = np.inf
     largest_window = (0.0, 0.0)
 
+    A_tolerance_idx = np.argmin(abs(abs(QNM.A_time_series * np.exp(-1j * QNM.omega * t_0s)) - A_tolerance)) + 1
+
     d_window_size = np.diff(t_0s)[0]
     if min_t_0_window is None:
-        min_t_0_window = max(
-            4 * d_window_size,
-            (
-                round(-min_t_0_window_factor / QNM.omega.imag / d_window_size)
-                * d_window_size
-            ),
-        )
+        try:
+            min_t_0_window = max(
+                4 * d_window_size,
+                (
+                    round(-min_t_0_window_factor / QNM.omega.imag / d_window_size)
+                    * d_window_size
+                ),
+            )
+        except:
+            min_t_0_window = 4 * d_window_size
+            
     for window_size in np.arange(
         min_t_0_window,
-        (t_0s[-1] - t_0s[0]) + d_window_size,
+        (t_0s[:A_tolerance_idx][-1] - t_0s[0]) + d_window_size,
         d_window_size,
     ):
         idx1 = 0
         min_CV = np.inf
 
-        while t_0s[idx1] + window_size < t_0s[-1]:
+        while t_0s[idx1] + window_size < t_0s[:A_tolerance_idx][-1]:
             idx2 = np.argmin(abs(t_0s - (t_0s[idx1] + window_size)))
             CV = np.std(QNM.A_time_series[idx1:idx2]) / np.mean(
                 abs(QNM.A_time_series[idx1:idx2])
@@ -370,6 +385,8 @@ class QNM:
         self.is_first_order_QNM = type(self.mode) is tuple
 
         if target_mode is None:
+            if self.mode == (0,0,0,0):
+                raise ValueError("constants must be provided a target mode!")
             if not self.is_first_order_QNM:
                 raise ValueError("2nd order QNMs must be provided a target mode!")
             else:
@@ -646,7 +663,7 @@ class QNMModel:
             waveform corresponding to self.QNMs.
         """
 
-        data = np.zeros_like(h_template.data)
+        data = np.zeros_like(h_template.data, dtype=complex)
 
         self.compute_omegas_and_Cs()
         for QNM in self.QNMs:
@@ -762,7 +779,7 @@ class QNMModel:
             )
 
             h_NR_fitted_kurt = h_NR_fitted[:, : ell_max_m + 1]
-            A = h_NR_fitted.data[:, data_index_m]
+            A = h_NR_fitted_kurt.data[:, data_index_m]
             for mode_index, (i, QNM) in enumerate(QNMs_matching_m):
                 QNM_w_unit_A = QNM.copy()
                 QNM_w_unit_A.A = 1.0
@@ -772,7 +789,7 @@ class QNMModel:
                 h_QNM = QNM_model_w_unit_A.compute_waveform(
                     h_NR_fitted_kurt, t_ref=t_ref
                 )
-
+                
                 B[:, :, mode_index] = h_QNM.data[:, data_index_m]
 
             A = np.reshape(A, h_NR_fitted_kurt.t.size * (ell_max_m - ell_min_m + 1))

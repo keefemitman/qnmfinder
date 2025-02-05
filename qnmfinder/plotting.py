@@ -4,15 +4,24 @@ import matplotlib.pyplot as plt
 from . import ringdown
 
 
-def plot_amplitudes_and_phases(QNM_model):
+def plot_amplitudes_and_phases(QNM_model, plot_phases=True, vert_limits=None):
     """Plot time-dependent amplitudes and phases of a ringdown.QNMModel.
 
     Parameters
     ----------
-    QNM_model: ringdown.QNMModel
+    QNM_model : ringdown.QNMModel
         QNM_model whose amplitudes/phases will be plot.
+    plot_phases : bool
+        whether or not to plot the phases.
+        [Default: True]
+    vert_limits : tuple
+        vertical axis limits.
+        [Default: None]
     """
-    fig, axis = plt.subplots(1, 3, width_ratios=[1, 1, 0])
+    if plot_phases:
+        fig, axis = plt.subplots(1, 3, width_ratios=[1, 1, 0])
+    else:
+        fig, axis = plt.subplots(1, 2, width_ratios=[1, 0])
     plt.subplots_adjust(wspace=0.31)
 
     for QNM in QNM_model.QNMs:
@@ -22,7 +31,6 @@ def plot_amplitudes_and_phases(QNM_model):
             QNM_model.t_0s,
             abs(
                 QNM.A_time_series
-                / (-1j * QNM.omega)
                 * np.exp(-1j * QNM.omega * QNM_model.t_0s)
             ),
             lw=0.5,
@@ -33,41 +41,45 @@ def plot_amplitudes_and_phases(QNM_model):
             QNM_model.t_0s[idx1:idx2],
             abs(
                 QNM.A_time_series
-                / (-1j * QNM.omega)
                 * np.exp(-1j * QNM.omega * QNM_model.t_0s)
             )[idx1:idx2],
             lw=2,
             color=p[0].get_color(),
         )
 
-        p = axis[1].plot(
-            QNM_model.t_0s, np.angle(QNM.A_time_series / (-1j * QNM.omega)), lw=0.5
-        )
-        idx1 = np.argmin(abs(QNM_model.t_0s - QNM.largest_stable_window[0]))
-        idx2 = np.argmin(abs(QNM_model.t_0s - QNM.largest_stable_window[1])) + 1
-        axis[1].plot(
-            QNM_model.t_0s[idx1:idx2],
-            np.angle(QNM.A_time_series / (-1j * QNM.omega))[idx1:idx2],
-            lw=2,
-            color=p[0].get_color(),
-        )
+        idx = 1
+        if plot_phases:
+            p = axis[1].plot(
+                QNM_model.t_0s, np.angle(QNM.A_time_series), lw=0.5
+            )
+            idx1 = np.argmin(abs(QNM_model.t_0s - QNM.largest_stable_window[0]))
+            idx2 = np.argmin(abs(QNM_model.t_0s - QNM.largest_stable_window[1])) + 1
+            axis[1].plot(
+                QNM_model.t_0s[idx1:idx2],
+                np.angle(QNM.A_time_series)[idx1:idx2],
+                lw=2,
+                color=p[0].get_color(),
+            )
+            idx = 2
 
-        axis[2].plot([None], [None], lw=0.5, label=str(QNM.mode))
+        axis[idx].plot([None], [None], lw=0.5, label=str(QNM.mode))
 
     axis[0].set_yscale("log")
-    axis[2].legend(loc="upper left")
+    axis[0].set_ylim(vert_limits)
+    axis[idx].legend(loc="upper left")
 
-    axis[2].spines["top"].set_visible(False)
-    axis[2].spines["right"].set_visible(False)
-    axis[2].spines["bottom"].set_visible(False)
-    axis[2].spines["left"].set_visible(False)
-    axis[2].get_xaxis().set_ticks([])
-    axis[2].get_yaxis().set_ticks([])
+    axis[idx].spines["top"].set_visible(False)
+    axis[idx].spines["right"].set_visible(False)
+    axis[idx].spines["bottom"].set_visible(False)
+    axis[idx].spines["left"].set_visible(False)
+    axis[idx].get_xaxis().set_ticks([])
+    axis[idx].get_yaxis().set_ticks([])
 
     axis[0].set_xlabel("fit start time $t_{0}$")
-    axis[1].set_xlabel("fit start time $t_{0}$")
     axis[0].set_title("$A_{\mathrm{QNM}}(t=t_{0})$")
-    axis[1].set_title("$\phi_{\mathrm{QNM}}(t=t_{\mathrm{peak}})$")
+    if plot_phases:
+        axis[1].set_xlabel("fit start time $t_{0}$")
+        axis[1].set_title("$\phi_{\mathrm{QNM}}(t=t_{\mathrm{peak}})$")
 
     plt.show()
 
