@@ -4,13 +4,16 @@ import matplotlib.pyplot as plt
 from . import ringdown
 
 
-def plot_amplitudes_and_phases(QNM_model, plot_phases=True, vert_limits=None):
+def plot_amplitudes_and_phases(QNM_model, plot_mirror_modes=False, plot_phases=True, vert_limits=None):
     """Plot time-dependent amplitudes and phases of a ringdown.QNMModel.
 
     Parameters
     ----------
     QNM_model : ringdown.QNMModel
         QNM_model whose amplitudes/phases will be plot.
+    plot_mirror_modes : bool
+        whether or not to plot the mirror modes.
+        [Default: False]
     plot_phases : bool
         whether or not to plot the phases.
         [Default: True]
@@ -25,8 +28,9 @@ def plot_amplitudes_and_phases(QNM_model, plot_phases=True, vert_limits=None):
     plt.subplots_adjust(wspace=0.31)
 
     for QNM in QNM_model.QNMs:
-        if QNM.target_mode[1] < 0:
-            continue
+        if not plot_mirror_modes:
+            if QNM.target_mode[1] < 0:
+                continue
         p = axis[0].plot(
             QNM_model.t_0s,
             abs(
@@ -93,7 +97,8 @@ def plot_free_frequency_evolution(
     N_free_frequencies=1,
     frequency_tolerance=1.0e-1,
     QNMs_to_plot=[],
-    n_procs="auto",
+    recycle_varpro_results_as_initial_guess=True,
+    n_procs=-1,
 ):
     """Plot the free frequency evolution of a ringdown.QNMModel.
 
@@ -118,10 +123,13 @@ def plot_free_frequency_evolution(
     QNMs_to_plot : list of tuples
         list of (\ell, m, n, s) QNMs (or 2nd order QNMs) to plot.
         [Default: []]
+    recycle_varpro_results_as_initial_guess : bool
+        whether or not to use the varpro results for subsequent initial guesses.
+        [Default: True]
     n_procs : int
         number of cores to use; if 'auto', optimal number based on the number of fit start times;
         if None, maximum number of cores; if -1, no multiprocessing is performed.
-        [Default: 'auto']
+        [Default: -1]
     """
     if n_procs == "auto":
         if t_0s.size <= 20:
@@ -132,19 +140,19 @@ def plot_free_frequency_evolution(
     QNM_model.compute_omegas_and_Cs()
 
     fit_QNM_model = QNM_model.fit(
-        h_NR, [mode], t_0s, t_f, N_free_frequencies=N_free_frequencies, n_procs=n_procs
+        h_NR, [mode], t_0s, t_f, N_free_frequencies=N_free_frequencies,
+        recycle_varpro_results_as_initial_guess=recycle_varpro_results_as_initial_guess, n_procs=n_procs
     )
 
     fig, axis = plt.subplots(1, 1)
 
-    for i, non_QNM_sinusoid in enumerate(fit_QNM_model.non_QNM_sinusoids):
-        omegas = non_QNM_sinusoid.omegas
+    for i, non_QNM_damped_sinusoid in enumerate(fit_QNM_model.non_QNM_damped_sinusoids):
+        omegas = non_QNM_damped_sinusoid.omegas
         plot = axis.scatter(
             omegas.real,
             -omegas.imag,
             c=fit_QNM_model.t_0s,
-            s=4,
-            marker=["o", "s", "^"][i],
+            marker=f'${i}$'
         )
     c = plt.colorbar(plot)
 

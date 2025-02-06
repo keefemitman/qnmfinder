@@ -76,7 +76,7 @@ def omega_and_C(mode, target_mode, M_f, chi_f):
 
 
 def compute_largest_stable_window(
-    QNM, t_0s, CV_tolerance=2.0e-2, min_t_0_window=None, min_t_0_window_factor=1.0, A_tolerance=1e-6,
+    QNM, t_0s, CV_tolerance=2.0e-2, min_t_0_window=None, min_t_0_window_factor=10.0, min_A_tolerance=0.
 ):
     """Find the largest stable window that meets self.CV_tolerance.
 
@@ -91,12 +91,14 @@ def compute_largest_stable_window(
         [Default: 2.e-2]
     min_t_0_window : float
         minimum window over fitting start times to consider.
-        [Default: -min_t_0_window_factor / QNM.omega.imag.]
+        [Default: -np.log(min_t_0_window_factor) / QNM.omega.imag.]
     min_t_0_window_factor : float
-        factor by which to change the minimum stable window.
-        [Default: 1.0]
-    A_tolerance : float
+        factor by which to change the minimum stable window;
+        this corresponds to the amount the amplitude should decay over the window.
+        [Default: 10.0]
+    min_A_tolerance : float
         minimum amplitude to consider physical.
+        [Default: 0.]
 
     Returns
     -------
@@ -109,7 +111,7 @@ def compute_largest_stable_window(
     true_min_CV = np.inf
     largest_window = (0.0, 0.0)
 
-    A_tolerance_idx = np.argmin(abs(abs(QNM.A_time_series * np.exp(-1j * QNM.omega * t_0s)) - A_tolerance)) + 1
+    min_A_tolerance_idx = np.argmin(abs(abs(QNM.A_time_series * np.exp(-1j * QNM.omega * t_0s)) - min_A_tolerance)) + 1
 
     d_window_size = np.diff(t_0s)[0]
     if min_t_0_window is None:
@@ -117,22 +119,22 @@ def compute_largest_stable_window(
             min_t_0_window = max(
                 4 * d_window_size,
                 (
-                    round(-min_t_0_window_factor / QNM.omega.imag / d_window_size)
+                    round(-np.log(min_t_0_window_factor) / QNM.omega.imag / d_window_size)
                     * d_window_size
                 ),
             )
         except:
             min_t_0_window = 4 * d_window_size
-            
+
     for window_size in np.arange(
         min_t_0_window,
-        (t_0s[:A_tolerance_idx][-1] - t_0s[0]) + d_window_size,
+        (t_0s[:min_A_tolerance_idx][-1] - t_0s[0]) + d_window_size,
         d_window_size,
     ):
         idx1 = 0
         min_CV = np.inf
 
-        while t_0s[idx1] + window_size < t_0s[:A_tolerance_idx][-1]:
+        while t_0s[idx1] + window_size < t_0s[:min_A_tolerance_idx][-1]:
             idx2 = np.argmin(abs(t_0s - (t_0s[idx1] + window_size)))
             CV = np.std(QNM.A_time_series[idx1:idx2]) / np.mean(
                 abs(QNM.A_time_series[idx1:idx2])
@@ -309,8 +311,8 @@ def merge_fit_models(fit_QNM_models, t_0s):
         As.append([QNM.A for QNM in fit_QNM_model.QNMs])
         omegas.append(
             [
-                non_QNM_sinusoid.omega
-                for non_QNM_sinusoid in fit_QNM_model.non_QNM_sinusoids
+                non_QNM_damped_sinusoid.omega
+                for non_QNM_damped_sinusoid in fit_QNM_model.non_QNM_damped_sinusoids
             ]
         )
         try:
@@ -336,8 +338,8 @@ def merge_fit_models(fit_QNM_models, t_0s):
         QNM.A = None
         QNM.A_time_series = As[:, i]
 
-    for i, non_QNM_sinusoid in enumerate(fit_QNM_model.non_QNM_sinusoids):
-        non_QNM_sinusoid.omegas = omegas[:, i]
+    for i, non_QNM_damped_sinusoid in enumerate(fit_QNM_model.non_QNM_damped_sinusoids):
+        non_QNM_damped_sinusoid.omegas = omegas[:, i]
 
     fit_QNM_model.L2_norms = np.array(L2_norms)
     fit_QNM_model.mismatches = np.array(mismatches)
@@ -383,6 +385,9 @@ class QNM:
     def __init__(self, mode, target_mode=None, A=None):
         self.mode = mode
         self.is_first_order_QNM = type(self.mode) is tuple
+
+        if not self.is_first_order_QNM:
+            self.mode = sorted(self.mode)
 
         if target_mode is None:
             if self.mode == (0,0,0,0):
@@ -468,21 +473,21 @@ class QNMModel:
         remnant dimensionless spin magnitude.
     QNMs : list of QNMs
         list of QNMs.
-    non_QNM_sinusoids : list of DampedSinusoids
+    non_QNM_damped_sinusoids : list of DampedSinusoids
         list of non QNM damped sinusoids, e.g., free frequency fits.
     """
 
-    def __init__(self, M_f, chi_f, QNMs=None, non_QNM_sinusoids=None):
+    def __init__(self, M_f, chi_f, QNMs=None, non_QNM_damped_sinusoids=None):
         self.M_f = M_f
         self.chi_f = chi_f
         if QNMs is None:
             self.QNMs = []
         else:
             self.QNMs = QNMs
-        if non_QNM_sinusoids is None:
-            self.non_QNM_sinusoids = []
+        if non_QNM_damped_sinusoids is None:
+            self.non_QNM_damped_sinusoids = []
         else:
-            self.non_QNM_sinusoids = non_QNM_sinusoids
+            self.non_QNM_damped_sinusoids = non_QNM_damped_sinusoids
 
     def copy(self):
         return copy.deepcopy(self)
@@ -576,7 +581,7 @@ class QNMModel:
         return QNM_model
 
     def analyze_model_time_series(
-        self, CV_tolerance=2.0e-2, min_t_0_window=None, min_t_0_window_factor=1.0
+        self, CV_tolerance=2.0e-2, min_t_0_window=None, min_t_0_window_factor=10.0, min_A_tolerance=0.
     ):
         """Analyze time series data of model, i.e.,
            find the largest stable window for each QNM
@@ -589,10 +594,14 @@ class QNMModel:
             [Default: 2.e-2]
         min_t_0_window : float
             minimum window over fitting start times to consider.
-            [Default: -min_t_0_window_factor / QNM.omega.imag.]
+            [Default: -np.log(min_t_0_window_factor) / QNM.omega.imag.]
         min_t_0_window_factor : float
-            factor by which to change the minimum stable window.
-            [Default: 1.0]
+            factor by which to change the minimum stable window;
+            this corresponds to the amount the amplitude should decay over the window.
+            [Default: 10.0]
+        min_A_tolerance : float
+            minimum amplitude to consider physical.
+            [Default: 0.]
 
         Returns
         -------
@@ -604,7 +613,7 @@ class QNMModel:
         QNM_model.compute_omegas_and_Cs()
         for QNM in QNM_model.QNMs:
             largest_stable_window, CV = compute_largest_stable_window(
-                QNM, QNM_model.t_0s, CV_tolerance, min_t_0_window, min_t_0_window_factor
+                QNM, QNM_model.t_0s, CV_tolerance, min_t_0_window, min_t_0_window_factor, min_A_tolerance
             )
             QNM.largest_stable_window = largest_stable_window
             QNM.CV = CV
@@ -675,7 +684,7 @@ class QNMModel:
                         * QNM.C[QNM.ells == _l]
                         * np.exp(-1j * QNM.omega * (h_template.t - t_ref))
                     )
-        for non_QNM in self.non_QNM_sinusoids:
+        for non_QNM in self.non_QNM_damped_sinusoids:
             _l, _m = non_QNM.target_mode
             data[:, h_template.index(_l, _m)] += non_QNM.A * np.exp(
                 -1j * non_QNM.omega * (h_template.t - t_ref)
@@ -833,8 +842,8 @@ class QNMModel:
         N_free_frequencies=0,
         initial_guess=None,
         bounds=None,
-        ftol=1e-8,
-        gtol=1e-8,
+        ftol=0.,
+        gtol=0.
     ):
         """Fit QNM model to an NR waveform via varpro.
 
@@ -864,10 +873,10 @@ class QNMModel:
             [Default: [(-np.inf, np.inf), (-np.inf, 0)] * N_free_frequencies]
         ftol : float
             ftol used in nonlinear least squares optimization.
-            [Default: 1.e-8]
+            [Default: 0.]
         gtol: float
             gtol used in nonlinear least squares optimization.
-            [Default: 1.e-8]
+            [Default: 0.]
 
         Returns
         -------
@@ -888,13 +897,23 @@ class QNMModel:
         N_damped_sinusoids = N_QNMs + N_free_frequencies
 
         w = np.ones(2 * h_NR_fitted.t.size)
-        if initial_guess is None:
+
+        if initial_guess is not None:
+            if len(initial_guess) != 2 * N_free_frequencies:
+                raise ValueError(f"Initial guess = {initial_guess} must be of length 2 * N_free_frequencies = {2 * N_free_frequencies}")
+        else:
             if N_free_frequencies == 1:
                 initial_guess = np.array([0.5, -0.2])
             elif N_free_frequencies == 2:
                 initial_guess = np.array([0.5, -0.2, -0.5, -0.2])
-            else:
+            elif N_free_frequencies == 3:
                 initial_guess = np.array([0.5, -0.2, -0.5, -0.2, 0.0, -0.2])
+            elif N_free_frequencies == 4:
+                initial_guess = np.array([0.5, -0.2, -0.5, -0.2, 0.0, -0.2, 0.5, -0.4])
+            elif N_free_frequencies == 5:
+                initial_guess = np.array([0.5, -0.2, -0.5, -0.2, 0.0, -0.2, 0.5, -0.4, -0.5, -0.4])
+            elif N_free_frequencies == 6:
+                initial_guess = np.array([0.5, -0.2, -0.5, -0.2, 0.0, -0.2, 0.5, -0.4, -0.5, -0.4, 0., -0.4])
 
         QNM_frequencies = []
         for QNM in self.QNMs:
@@ -940,13 +959,22 @@ class QNMModel:
             QNM.A = As[2 * i] + 1j * As[2 * i + 1]
 
         for i in range(N_free_frequencies):
-            fit_QNM_model.non_QNM_sinusoids.append(
+            fit_QNM_model.non_QNM_damped_sinusoids.append(
                 DampedSinusoid(
                     mode,
                     free_frequencies[2 * i] + 1j * free_frequencies[2 * i + 1],
                     As[2 * (N_QNMs + i)] + 1j * As[2 * (N_QNMs + i) + 1],
                 )
             )
+
+        fit_QNM_model.non_QNM_damped_sinusoids = [
+            x for _, x in sorted(
+                zip(
+                    [non_QNM_damped_sinusoid.omega.real for non_QNM_damped_sinusoid in fit_QNM_model.non_QNM_damped_sinusoids],
+                    fit_QNM_model.non_QNM_damped_sinusoids
+                )
+            )
+        ]
 
         return fit_QNM_model
 
@@ -962,6 +990,7 @@ class QNMModel:
         bounds=None,
         ftol=0.0,
         gtol=0.0,
+        recycle_varpro_results_as_initial_guess=False,
         n_procs=None,
     ):
         """Fit QNM model to an NR waveform.
@@ -1001,6 +1030,9 @@ class QNMModel:
         gtol: float
             gtol used in varpro's nonlinear least squares optimization.
             [Default: 0.]
+        recycle_varpro_results_as_initial_guess : bool
+            whether or not to use the varpro results for subsequent initial guesses.
+            [Default: False]
         n_procs : int
             number of cores to use; if -1, no multiprocessing is performed.
             [Default: maximum number of cores]
@@ -1023,6 +1055,9 @@ class QNMModel:
 
         if n_procs is None:
             n_procs = multiprocessing.cpu_count()
+
+        if n_procs != -1 and recycle_varpro_results_as_initial_guess:
+            raise ValueError("Cannot recycle varpro results as initial guess when multiprocessing.")
 
         if not type(t_i) is np.ndarray:
             if N_free_frequencies == 0:
@@ -1054,7 +1089,7 @@ class QNMModel:
                                 t_ref=t_ref,
                                 return_h_NR_fitted=False,
                             ),
-                            t_i_array,
+                            t_i_array[::-1],
                         )
                     else:
                         fit_QNM_models = pool.map(
@@ -1070,7 +1105,7 @@ class QNMModel:
                                 ftol=ftol,
                                 gtol=gtol,
                             ),
-                            t_i_array,
+                            t_i_array[::-1],
                         )
 
             else:
@@ -1084,25 +1119,34 @@ class QNMModel:
                             t_ref=t_ref,
                             return_h_NR_fitted=False,
                         )
-                        for t_i in t_i_array
+                        for t_i in t_i_array[::-1]
                     ]
                 else:
-                    fit_QNM_models = [
-                        self.fit_varpro(
-                            h_NR,
-                            modes[0],
-                            t_i=t_i,
-                            t_f=t_f,
-                            t_ref=t_ref,
-                            N_free_frequencies=N_free_frequencies,
-                            initial_guess=initial_guess,
-                            bounds=bounds,
-                            ftol=ftol,
-                            gtol=gtol,
+                    fit_QNM_models = []
+                    for i, t_i in enumerate(t_i_array[::-1]):
+                        if i == 0:
+                            initial_guess = None
+                        else:
+                            initial_guess = []
+                            for non_QNM_damped_sinusoid in fit_QNM_models[-i].non_QNM_damped_sinusoids:
+                                initial_guess.append(non_QNM_damped_sinusoid.omega.real)
+                                initial_guess.append(non_QNM_damped_sinusoid.omega.imag)
+                            initial_guess = np.array(initial_guess)
+                        fit_QNM_models.append(
+                            self.fit_varpro(
+                                h_NR,
+                                modes[0],
+                                t_i=t_i,
+                                t_f=t_f,
+                                t_ref=t_ref,
+                                N_free_frequencies=N_free_frequencies,
+                                initial_guess=initial_guess,
+                                bounds=bounds,
+                                ftol=ftol,
+                                gtol=gtol,
+                            )
                         )
-                        for t_i in t_i_array
-                    ]
 
-            fit_QNM_model = merge_fit_models(fit_QNM_models, t_i_array)
+            fit_QNM_model = merge_fit_models(fit_QNM_models[::-1], t_i_array)
 
             return fit_QNM_model

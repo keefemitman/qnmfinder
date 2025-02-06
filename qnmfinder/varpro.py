@@ -265,7 +265,7 @@ def varpro(t, y, w, alpha, n, ada, bounds=None, max_nfev=None, **kwargs):
             return Jacobian, c, wresid, y_est, myrank
 
         # tol = m * sys.float_info.epsilon
-        # NOTE: zero added here to account for Im[(2,0)] ~ 0.
+        # NOTE: zero introduced here to account for Im[(2,0)] ~ 0.
         tol = 0 * m * np.finfo(float).eps
         myrank = sum(s > tol * s[0])
 

@@ -27,14 +27,17 @@ class QNMModelBuilder:
     chi_f : float
         remnant dimensionless spin magnitude.
     t_i : float
-        earliest time (relative to peak of psi4) to fit.
+        earliest time (relative to peak) to fit.
         [Default: 0.]
     t_f : float
-        latest time (relative to peak luminsoity) to fit.
+        latest time (relative to peak) to fit.
         [Default: 100.]
     t_0_f : float
-        latest start time (relative to peak of psi4) to fit.
+        latest start time (relative to peak) to fit.
         [Default: 80.]
+    t_peak_norm_function : str
+        function to use to compute the L^{2} norm; 'strain', 'news', or 'psi4'.
+        [Default: 'psi4']
     d_t_0 : float
         spacing between t_i and t_0_f to iterate over.
         [Default: 1.]
@@ -51,9 +54,6 @@ class QNMModelBuilder:
     modes : list
         (\ell, m) modes of NR waveform to fit.
         [Default: use all modes.]
-    mode_power_tol : float
-        lowest unmodeled power to consider.
-        [Default: 0.]
     fit_news : bool
         fit the news instead of the strain;
         returned amplitudes will still be for the strain.
@@ -77,24 +77,34 @@ class QNMModelBuilder:
         require 1st order QNM to exist in model to be considered
         as a component of a 2nd order QNM.
         [Default: True]
+    exclude_zero_frequency_QNMs : bool
+        whether or not to exclude zero frequency QNMs.
+        [Default: True]
     t_ref : float
         reference time (relative to peak of psi4) for QNM amplitudes.
         [Default: 0.]
-    allow_more_than_one_free_frequency : bool
-        whether or not to allow the use of two free frequencies if one fails.
-        [Default: True]
+    max_N_free_frequencies : int
+        maximum number of free frequencies to fit if one fails.
+        [Default: 4]
+    power_tolerance : float
+        minimum unmodeled power needed to search for a QNM.
+        [Default : 1.e-10]
     frequency_tolerance : float
         minimum modulus to match free frequency to QNM frequency.
         [Default: 1.e-1]
     CV_tolerance : float
         minimum coefficient of variation to QNM to be considered stable.
-        [Default: 2.e-2]
+        [Default: 5.e-2]
     min_t_0_window : float
         minimum window over fitting start times to consider.
-        [Default: -min_t_0_window_factor / QNM.omega.imag.]
+        [Default: -np.log(min_t_0_window_factor) / QNM.omega.imag.]
     min_t_0_window_factor : float
-        factor by which to change the minimum stable window.
-        [Default: 1.0]
+        factor by which to change the minimum stable window;
+        this corresponds to the amount the amplitude should decay over the window.
+        [Default: 10.0]
+    min_A_tolerance : float
+        minimum amplitude to consider during stability tests.
+        [Default: 0.]
     reset_after_adding_QNM : bool
         whether or not to reset the fitting start time iteration
         after successfully adding a new QNM to the model.
@@ -120,12 +130,12 @@ class QNMModelBuilder:
         t_i=0,
         t_f=100,
         t_0_f=80,
+        t_peak_norm_function='psi4',
         d_t_0=1.0,
         d_t_0_search=1.0,
         ell_min_NR=2,
         ell_max_NR=5,
         modes=None,
-        mode_power_tol=0.0,
         fit_news=True,
         ell_min_QNM=2,
         ell_max_QNM=5,
@@ -133,12 +143,15 @@ class QNMModelBuilder:
         try_mirrors=True,
         include_2nd_order_QNMs=True,
         require_1st_order_QNM_existence=True,
+        exclude_zero_frequency_QNMs=True,
         t_ref=0.0,
-        allow_more_than_one_free_frequency=True,
+        max_N_free_frequencies=4,
+        power_tolerance=1.0e-10,
         frequency_tolerance=1.0e-1,
-        CV_tolerance=2.0e-2,
+        CV_tolerance=5.0e-2,
         min_t_0_window=None,
-        min_t_0_window_factor=1.0,
+        min_t_0_window_factor=10.0,
+        min_A_tolerance=0.,
         reset_after_adding_QNM=True,
         preexisting_model=None,
         n_procs="auto",
@@ -176,6 +189,7 @@ class QNMModelBuilder:
         self.chi_f = chi_f
         self.t_i = t_i
         self.t_f = t_f
+        self.t_peak_norm_function = t_peak_norm_function
         self.t_0_f = t_0_f
         if d_t_0 < min(np.diff(self.h_NR.t)):
             print(
@@ -200,16 +214,6 @@ class QNMModelBuilder:
         self.ell_min_NR = ell_min_NR
         self.ell_max_NR = ell_max_NR
         self.modes = modes
-        self.mode_power_tol = mode_power_tol
-        if self.mode_power_tol != 0.0:
-            print(
-                colored(
-                    "********\n"
-                    + "Warning: mode power tolerance not yet implemented.\n"
-                    + "********",
-                    "red",
-                )
-            )
         self.fit_news = fit_news
         self.ell_min_QNM = ell_min_QNM
         self.ell_max_QNM = ell_max_QNM
@@ -217,19 +221,22 @@ class QNMModelBuilder:
         self.try_mirrors = try_mirrors
         self.include_2nd_order_QNMs = include_2nd_order_QNMs
         self.require_1st_order_QNM_existence = require_1st_order_QNM_existence
+        self.exclude_zero_frequency_QNMs = exclude_zero_frequency_QNMs
         self.t_ref = t_ref
-        self.allow_more_than_one_free_frequency = allow_more_than_one_free_frequency
+        self.max_N_free_frequencies = max_N_free_frequencies
+        self.power_tolerance = power_tolerance
         self.frequency_tolerance = frequency_tolerance
         self.CV_tolerance = CV_tolerance
         self.min_t_0_window = min_t_0_window
         self.min_t_0_window_factor = min_t_0_window_factor
+        self.min_A_tolerance = min_A_tolerance
         self.reset_after_adding_QNM = reset_after_adding_QNM
         self.n_procs = n_procs
         self.verbose = verbose
 
         # fix NR waveform so t_peak = time of peak of psi4
         self.h_NR.t *= self.M_total
-        self.h_NR.t -= self.compute_t_peak()
+        self.h_NR.t -= self.compute_t_peak(self.t_peak_norm_function)
         self.h_NR = self.h_NR[
             np.argmin(abs(self.h_NR.t - self.t_i)) : np.argmin(
                 abs(self.h_NR.t - self.t_f)
@@ -267,8 +274,24 @@ class QNMModelBuilder:
             else:
                 self.update_model(QNM_model)
 
-    def compute_t_peak(self):
-        """Compute the time of peak of psi4."""
+    def compute_t_peak(self, norm_function='psi4', mode=None):
+        """Compute the time of peak of some norm function.
+
+        Parameters
+        ----------
+        norm_function : str
+            function to use to compute the L^{2} norm; 'strain', 'news', or 'psi4'.
+            [Default: 'psi4']
+        mode : (tuple)
+            mode to compute the time of peak from instead of the L^{2} norm over the sphere;
+            if None, then the L^{2} norm over the sphere is used.
+            [Default: None]
+
+        Returns
+        -------
+        t_peak : float
+            time of peak.
+        """
         psi4 = self.h_NR.copy()
         psi4.data = psi4.data_ddot
         psi4.dataType = scri.psi4
@@ -288,7 +311,9 @@ class QNMModelBuilder:
         )
         coeffs = np.array([y_vec.dot(v1) for v1 in inv_mat])
 
-        return self.h_NR.t[index] - coeffs[1] / (2.0 * coeffs[2])
+        t_peak = self.h_NR.t[index] - coeffs[1] / (2.0 * coeffs[2])
+
+        return t_peak
 
     def update_model(self, QNM_model):
         """Update self.QNM_model to reflect the content of QNM_model.
@@ -315,8 +340,18 @@ class QNMModelBuilder:
         self.h_residual_fit = self.h_NR_fit.copy()
         self.h_residual_fit.data -= self.h_QNM_fit.data
 
-    def compute_model_errors(self):
-        """Update self.L2_norms and self.mismatches to reflect the content of self.residual."""
+    def compute_model_errors(self, compute_mismatch=False, compute_strain_errors=False):
+        """Update self.L2_norms to reflect the content of self.residual.
+        
+        Parameters
+        ----------
+        compute_mismatch : bool
+            whether or not to update self.mismatches.
+            [Default: False]
+        compute_strain_errors : bool
+            whether or not to comptue strain errors if self.fit_news = True.
+            [Default: False]
+        """
         L2_norms = []
         mismatches = []
         for t_0 in self.t_0s:
@@ -325,19 +360,17 @@ class QNMModelBuilder:
             )
             L2_norms.append(L2_norm)
 
-            mismatch = utils.compute_mismatch(
-                self.h_NR_fit, self.h_QNM_fit, t_i=t_0, modes=self.modes
-            )
-            mismatches.append(mismatch)
+            if compute_mismatch:
+                mismatch = utils.compute_mismatch(
+                    self.h_NR_fit, self.h_QNM_fit, t_i=t_0, modes=self.modes
+                )
+                mismatches.append(mismatch)
 
-        if not self.fit_news:
-            self.L2_norms = L2_norms
+        self.L2_norms = L2_norms
+        if compute_mismatch:
             self.mismatches = mismatches
-        else:
-            self.L2_norms_fit = L2_norms
-            self.mismatches_fit = mismatches
-
-        if self.fit_news:
+            
+        if self.fit_news and compute_strain_errors:
             L2_norms = []
             mismatches = []
 
@@ -350,13 +383,15 @@ class QNMModelBuilder:
                 )
                 L2_norms.append(L2_norm)
 
-                mismatch = utils.compute_mismatch(
-                    self.h_NR, h_QNM, t_i=t_0, modes=self.modes
-                )
-                mismatches.append(mismatch)
+                if compute_mismatch:
+                    mismatch = utils.compute_mismatch(
+                        self.h_NR, h_QNM, t_i=t_0, modes=self.modes
+                    )
+                    mismatches.append(mismatch)
 
-            self.L2_norms = L2_norms
-            self.mismatches = mismatches
+            self.L2_norms_strain = L2_norms
+            if compute_mismatch:
+                self.mismatches_strain = mismatches
 
     def find_most_unmodeled_mode(self, t_0=None):
         """Find the mode which has the most unmodeled power.
@@ -408,7 +443,7 @@ class QNMModelBuilder:
         unmodeled_mode = tuple(LMs_ranked[0])
 
         return unmodeled_mode, LMs_and_power
-
+        
     def match_damped_sinusoid_to_QNM(self, damped_sinusoid):
         """Match a damped sinusoid to a QNM.
 
@@ -517,8 +552,13 @@ class QNMModelBuilder:
                                     total_d_N = (N1_test - N1) + (N2_test - N2)
                                     if total_d_N == 1:
                                         lower_overtones_exist = True
+                                        
                             if (N1 != 0 or N2 != 0) and not lower_overtones_exist:
                                 continue
+
+                            if self.exclude_zero_frequency_QNMs:
+                                if (omega1 + omega2).real == 0:
+                                    continue
 
                             d_omega = abs((omega1 + omega2) - damped_sinusoid.omega)
                             if d_omega < min_d_omega:
@@ -585,14 +625,16 @@ class QNMModelBuilder:
             return False
 
         QNMs = [
-            self.match_damped_sinusoid_to_QNM(non_QNM_sinusoid)
-            for non_QNM_sinusoid in fit_QNM_model_filtered.non_QNM_sinusoids
+            self.match_damped_sinusoid_to_QNM(non_QNM_damped_sinusoid)
+            for non_QNM_damped_sinusoid in fit_QNM_model_filtered.non_QNM_damped_sinusoids
         ]
 
         if np.all([not QNM is None for QNM in QNMs]):
-            if len(QNMs) == 2:
-                if QNMs[0].mode == QNMs[1].mode:
-                    return False
+            if len(QNMs) > 1:
+                QNM_modes = [QNM.mode for QNM in QNMs]
+                for QNM_mode in QNM_modes:
+                    if QNM_modes.count(QNM_modes) > 1:
+                        return False
 
             QNM_model = ringdown.QNMModel(
                 self.M_f, self.chi_f, self.QNM_model.QNMs + QNMs
@@ -627,21 +669,10 @@ class QNMModelBuilder:
 
         # find largest stable windows and measure amplitudes
         QNM_model = fit_QNM_model.analyze_model_time_series(
-            self.CV_tolerance, self.min_t_0_window, self.min_t_0_window_factor
+            self.CV_tolerance, self.min_t_0_window, self.min_t_0_window_factor, self.min_A_tolerance
         )
 
         QNM_stable_windows = [QNM.largest_stable_window for QNM in QNM_model.QNMs]
-
-        # if first QNM, use basic stability check
-        if len(QNM_stable_windows) == 1:
-            if self.verbose:
-                print(colored("** model passed stability test!", "green"))
-            self.previous_QNM_stable_windows = QNM_stable_windows
-            return (
-                -self.min_t_0_window_factor / QNM_model.QNMs[0].omega.imag
-                <= np.diff(QNM_stable_windows[-1]),
-                QNM_model,
-            )
 
         if np.all(np.diff(QNM_stable_windows) > 0):
             if self.verbose:
@@ -699,24 +730,57 @@ class QNMModelBuilder:
 
         print(
             colored(
-                "***************\n" + "Building Model!\n" + "***************\n", "blue"
+                "***************\n"
+                + "Building Model!\n"
+                + "***************\n",
+                "blue"
             )
         )
+        if self.verbose:
+            print(
+                colored(
+                    f"* t_i = {self.t_i}\n"
+                    + f"* t_f = {self.t_f}\n"
+                    + f"* t_0_f = {self.t_0_f}\n"
+                    + f"* t_peak_norm_function = {self.t_peak_norm_function}\n"
+                    + f"* d_t_0 = {self.d_t_0}\n"
+                    + f"* d_t_0_search = {self.d_t_0_search}\n"
+                    + f"* fit_news = {self.fit_news}\n"
+                    + f"* max_N_free_frequencies = {self.max_N_free_frequencies}\n"
+                    + f"* power_tolerance = {self.power_tolerance}\n"
+                    + f"* CV_tolerance = {self.CV_tolerance}\n"
+                    + f"* min_t_0_window_factor = {self.min_t_0_window_factor}\n"
+                    + f"* min_A_tolerance = {self.min_A_tolerance}\n",
+                    "light_blue"
+                )
+            )
+            
         while t_0 >= self.t_i:
             if self.verbose:
                 print(colored(f"** working on t_0 = {t_0}.\n", "light_blue"))
 
             # find most unmodeled mode, by power
             mode_to_model, LMs_and_power = self.find_most_unmodeled_mode(t_0)
+            if LMs_and_power[0][1] < self.power_tolerance:
+                if self.verbose:
+                    print(
+                        colored(
+                            f"** unmodeled power in {mode_to_model} = {LMs_and_power[0][1]} < power tolerance = {self.power_tolerance};\n"
+                            + "continuing search at the next earliest time.\n",
+                            "light_green"
+                        )
+                    )
+                t_0 -= self.d_t_0_search
+                continue
 
-            if self.allow_more_than_one_free_frequency:
+            if self.max_N_free_frequencies > 1:
                 if abs(t_0 - self.t_i) < self.d_t_0_search or (
                     not self.mode_to_model is None
                     and self.mode_to_model != mode_to_model
                 ):
                     # change fit to include two free damped sinusoids
                     # since we've failed to fit self.mode_to_model
-                    if self.N_free_frequencies == 1:
+                    if self.N_free_frequencies < self.max_N_free_frequencies:
                         if self.verbose:
                             print(
                                 colored(
@@ -726,7 +790,7 @@ class QNMModelBuilder:
                                     "light_yellow",
                                 )
                             )
-                        self.N_free_frequencies = 2
+                        self.N_free_frequencies += 1
 
                         t_0 = self.latest_t_0s[-1]
 
@@ -853,7 +917,7 @@ class QNMModelBuilder:
 
                     self.latest_t_0s = latest_t_0s
                     self.latest_t_0s_modes = latest_t_0s_modes
-
+                    
             t_0 = self.latest_t_0s[-1]
 
         del self.latest_t_0s
