@@ -39,8 +39,8 @@ def plot_amplitudes_and_phases(QNM_model, plot_mirror_modes=False, plot_phases=T
             ),
             lw=0.5,
         )
-        idx1 = np.argmin(abs(QNM_model.t_0s - QNM.largest_stable_window[0]))
-        idx2 = np.argmin(abs(QNM_model.t_0s - QNM.largest_stable_window[1])) + 1
+        idx1 = np.argmin(abs(QNM_model.t_0s - QNM.stable_window[0]))
+        idx2 = np.argmin(abs(QNM_model.t_0s - QNM.stable_window[1])) + 1
         axis[0].plot(
             QNM_model.t_0s[idx1:idx2],
             abs(
@@ -56,8 +56,8 @@ def plot_amplitudes_and_phases(QNM_model, plot_mirror_modes=False, plot_phases=T
             p = axis[1].plot(
                 QNM_model.t_0s, np.angle(QNM.A_time_series), lw=0.5
             )
-            idx1 = np.argmin(abs(QNM_model.t_0s - QNM.largest_stable_window[0]))
-            idx2 = np.argmin(abs(QNM_model.t_0s - QNM.largest_stable_window[1])) + 1
+            idx1 = np.argmin(abs(QNM_model.t_0s - QNM.stable_window[0]))
+            idx2 = np.argmin(abs(QNM_model.t_0s - QNM.stable_window[1])) + 1
             axis[1].plot(
                 QNM_model.t_0s[idx1:idx2],
                 np.angle(QNM.A_time_series)[idx1:idx2],

@@ -667,12 +667,12 @@ class QNMModelBuilder:
             n_procs=self.n_procs,
         )
 
-        # find largest stable windows and measure amplitudes
+        # find stable windows and measure amplitudes
         QNM_model = fit_QNM_model.analyze_model_time_series(
             self.CV_tolerance, self.min_t_0_window, self.min_t_0_window_factor, self.min_A_tolerance
         )
 
-        QNM_stable_windows = [QNM.largest_stable_window for QNM in QNM_model.QNMs]
+        QNM_stable_windows = [QNM.stable_window for QNM in QNM_model.QNMs]
 
         if np.all(np.diff(QNM_stable_windows) > 0):
             if self.verbose:
@@ -681,7 +681,7 @@ class QNMModelBuilder:
                     "* new window(s):",
                 )
                 for QNM in QNM_model.QNMs[-d_N_QNMs:]:
-                    print(QNM.mode, "->", QNM.largest_stable_window)
+                    print(QNM.mode, "->", QNM.stable_window)
                 print(
                     "* new CV(s):",
                 )
