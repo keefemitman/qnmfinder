@@ -37,7 +37,7 @@ class QNMModelBuilder:
         [Default: 80.]
     t_peak_norm_function : str
         function to use to compute the L^{2} norm; 'strain', 'news', or 'psi4'.
-        [Default: 'psi4']
+        [Default: 'news']
     d_t_0 : float
         spacing between t_i and t_0_f to iterate over.
         [Default: 1.]
@@ -50,7 +50,7 @@ class QNMModelBuilder:
         [Default: 2]
     ell_max_NR : int
         maximum QNM \ell value to consider.
-        [Default: 5]
+        [Default: 6]
     modes : list
         (\ell, m) modes of NR waveform to fit.
         [Default: use all modes.]
@@ -63,7 +63,7 @@ class QNMModelBuilder:
         [Default: 2]
     ell_max_QNM : int
         maximum QNM \ell value to consider.
-        [Default: 5]
+        [Default: 6]
     N_max : int
         maximum overtone value to consider.
         [Default: 4]
@@ -81,14 +81,14 @@ class QNMModelBuilder:
         whether or not to exclude zero frequency QNMs.
         [Default: True]
     t_ref : float
-        reference time (relative to peak of psi4) for QNM amplitudes.
+        reference time (relative to peak) for QNM amplitudes.
         [Default: 0.]
     max_N_free_frequencies : int
         maximum number of free frequencies to fit if one fails.
         [Default: 4]
     power_tolerance : float
         minimum unmodeled power needed to search for a QNM.
-        [Default : 1.e-10]
+        [Default : 1.e-12]
     frequency_tolerance : float
         minimum modulus to match free frequency to QNM frequency.
         [Default: 1.e-1]
@@ -130,15 +130,15 @@ class QNMModelBuilder:
         t_i=0,
         t_f=100,
         t_0_f=80,
-        t_peak_norm_function='psi4',
+        t_peak_norm_function='news',
         d_t_0=1.0,
         d_t_0_search=1.0,
         ell_min_NR=2,
-        ell_max_NR=5,
+        ell_max_NR=6,
         modes=None,
         fit_news=True,
         ell_min_QNM=2,
-        ell_max_QNM=5,
+        ell_max_QNM=6,
         N_max=4,
         try_mirrors=True,
         include_2nd_order_QNMs=True,
@@ -146,7 +146,7 @@ class QNMModelBuilder:
         exclude_zero_frequency_QNMs=True,
         t_ref=0.0,
         max_N_free_frequencies=4,
-        power_tolerance=1.0e-10,
+        power_tolerance=1.0e-12,
         frequency_tolerance=1.0e-1,
         CV_tolerance=5.0e-2,
         min_t_0_window=None,
@@ -234,7 +234,7 @@ class QNMModelBuilder:
         self.n_procs = n_procs
         self.verbose = verbose
 
-        # fix NR waveform so t_peak = time of peak of psi4
+        # fix NR waveform so t_peak = time of peak
         self.h_NR.t *= self.M_total
         self.h_NR.t -= self.compute_t_peak(self.t_peak_norm_function)
         self.h_NR = self.h_NR[
@@ -274,14 +274,14 @@ class QNMModelBuilder:
             else:
                 self.update_model(QNM_model)
 
-    def compute_t_peak(self, norm_function='psi4', mode=None):
+    def compute_t_peak(self, norm_function_name='news', mode=None):
         """Compute the time of peak of some norm function.
 
         Parameters
         ----------
-        norm_function : str
+        norm_function_name : str
             function to use to compute the L^{2} norm; 'strain', 'news', or 'psi4'.
-            [Default: 'psi4']
+            [Default: 'news']
         mode : (tuple)
             mode to compute the time of peak from instead of the L^{2} norm over the sphere;
             if None, then the L^{2} norm over the sphere is used.
@@ -292,10 +292,16 @@ class QNMModelBuilder:
         t_peak : float
             time of peak.
         """
-        psi4 = self.h_NR.copy()
-        psi4.data = psi4.data_ddot
-        psi4.dataType = scri.psi4
-        norm = psi4.norm()
+        norm_function = self.h_NR.copy()
+        if norm_function_name == 'news':
+            norm_function.data = norm_function.data_dot
+        elif norm_function_name == 'psi4':
+            norm_function.data = norm_function.data_ddot
+
+        if mode is None:
+            norm = norm_function.norm()
+        else:
+            norm = abs(norm_function.data[:,norm_function.index(*mode)])
         
         index = np.argmax(norm)
         index = max(2, min(len(self.h_NR.t) - 3, index))
@@ -427,7 +433,7 @@ class QNMModelBuilder:
             abs(self.h_residual_fit.data[idx_t_0:, mode_indices]) ** 2,
             self.h_residual_fit.t[idx_t_0:],
             axis=0,
-        )[-1]
+        )[-1]/(self.h_residual_fit.t[idx_t_0:][-1] - self.h_residual_fit.t[idx_t_0:][0])
 
         LMs_ranked = [
             x
