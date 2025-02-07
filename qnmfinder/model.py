@@ -639,7 +639,7 @@ class QNMModelBuilder:
             if len(QNMs) > 1:
                 QNM_modes = [QNM.mode for QNM in QNMs]
                 for QNM_mode in QNM_modes:
-                    if QNM_modes.count(QNM_modes) > 1:
+                    if QNM_modes.count(QNM_mode) > 1:
                         return False
 
             QNM_model = ringdown.QNMModel(
