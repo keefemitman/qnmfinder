@@ -380,7 +380,7 @@ class QNM:
             if self.mode == (0,0,0,0):
                 raise ValueError("constants must be provided a target mode!")
             if not self.is_first_order_QNM:
-                raise ValueError("2nd order QNMs must be provided a target mode!")
+                raise ValueError("higher order QNMs must be provided a target mode!")
             else:
                 self.target_mode = self.mode[:2]
         else:
@@ -438,15 +438,17 @@ class QNM:
 
             return QNM(tuple(mode), tuple(target_mode))
         else:
-            mode1, mode2 = [list(mode) for mode in self.mode]
-            mode1[1] = -mode1[1]
-            mode1[3] = -mode1[3]
-            mode2[1] = -mode2[1]
-            mode2[3] = -mode2[3]
+            mode_mirrors = []
+            for mode in self.mode:
+                mode_mirror = list(mode)
+                mode_mirror[1] = -mode_mirror[1]
+                mode_mirror[3] = -mode_mirror[3]
+
+                mode_mirrors.append(tuple(mode_mirror))
 
             target_mode[1] = -target_mode[1]
 
-            return QNM([tuple(mode1), tuple(mode2)], tuple(target_mode))
+            return QNM(mode_mirrors, tuple(target_mode))
 
 
 class QNMModel:

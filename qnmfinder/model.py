@@ -73,6 +73,9 @@ class QNMModelBuilder:
     include_2nd_order_QNMs : bool
         whether or not to include 2nd order QNMs
         [Default: True]
+    include_3rd_order_QNMs : bool
+        whether or not to include 3rd order QNMs
+        [Default: False]
     require_1st_order_QNM_existence : bool
         require 1st order QNM to exist in model to be considered
         as a component of a 2nd order QNM.
@@ -142,6 +145,7 @@ class QNMModelBuilder:
         N_max=4,
         try_mirrors=True,
         include_2nd_order_QNMs=True,
+        include_3rd_order_QNMs=False,
         require_1st_order_QNM_existence=True,
         exclude_zero_frequency_QNMs=True,
         t_ref=0.0,
@@ -220,6 +224,16 @@ class QNMModelBuilder:
         self.N_max = N_max
         self.try_mirrors = try_mirrors
         self.include_2nd_order_QNMs = include_2nd_order_QNMs
+        if include_3rd_order_QNMs:
+            print(
+                colored(
+                    "********\n"
+                    + f"Warning: 3rd order QNM search not yet optimized and could produce nonsensical results\n"
+                    + "********",
+                    "red",
+                )
+            )
+        self.include_3rd_order_QNMs = include_3rd_order_QNMs
         self.require_1st_order_QNM_existence = require_1st_order_QNM_existence
         self.exclude_zero_frequency_QNMs = exclude_zero_frequency_QNMs
         self.t_ref = t_ref
@@ -468,7 +482,10 @@ class QNMModelBuilder:
             QNM.mode for QNM in self.QNM_model.QNMs if QNM.is_first_order_QNM
         ]
         second_order_QNMs = [
-            QNM.mode for QNM in self.QNM_model.QNMs if not QNM.is_first_order_QNM
+            QNM.mode for QNM in self.QNM_model.QNMs if not QNM.is_first_order_QNM and len(QNM.mode) == 2
+        ]
+        third_order_QNMs = [
+            QNM.mode for QNM in self.QNM_model.QNMs if not QNM.is_first_order_QNM and len(QNM.mode) == 3
         ]
         for L1 in range(self.ell_min_QNM, self.ell_max_QNM + 1):
             if self.include_2nd_order_QNMs:
@@ -505,22 +522,25 @@ class QNMModelBuilder:
                                 QNM = ringdown.QNM((L1, M1, N1, S1))
                                 min_d_omega = d_omega
 
-                        # second order QNMs (could be improved w/ better spatial structure via, e.g., Sizheng's work)
+                        if not self.include_2nd_order_QNMs:
+                            continue
+
                         if self.require_1st_order_QNM_existence:
                             if is_not_repeat:
                                 continue
 
                         for L2, M2, N2, S2 in first_order_QNMs:
                             # wigner 3j rules
+                            passes_wigner_3j_rules = True
                             if (
                                 not damped_sinusoid.target_mode[0] >= abs(L1 - L2)
                                 and damped_sinusoid.target_mode[0] <= L1 + L2
                             ):
-                                continue
+                                passes_wigner_3j_rules = False
                             if (
                                 M1 + M2 != damped_sinusoid.target_mode[1]
-                            ):  # (this isn't exactly correct)
-                                continue
+                            ): 
+                                passes_wigner_3j_rules = False
                             if (
                                 damped_sinusoid.target_mode[1] == M1
                                 and M1 == M2
@@ -528,19 +548,17 @@ class QNMModelBuilder:
                                 and not (L1 + L2 + damped_sinusoid.target_mode[0]) % 2
                                 == 0
                             ):
-                                continue
+                                passes_wigner_3j_rules = False
 
                             omega2 = ringdown.omega_and_C(
                                 (L2, M2, N2, S2), (L2, M2), self.M_f, self.chi_f
                             )[0]
 
-                            # filter 2nd order QNM
                             # no repeats
-                            if (
+                            is_not_repeat = not (
                                 sorted([(L1, M1, N1, S1), (L2, M2, N2, S2)])
                                 in second_order_QNMs
-                            ):
-                                continue
+                            )
 
                             # lower overtones must exist
                             lower_overtones_exist = False
@@ -558,21 +576,72 @@ class QNMModelBuilder:
                                     total_d_N = (N1_test - N1) + (N2_test - N2)
                                     if total_d_N == 1:
                                         lower_overtones_exist = True
-                                        
-                            if (N1 != 0 or N2 != 0) and not lower_overtones_exist:
+
+                            lower_overtones_exist = (N1 == 0 and N2 == 0) or lower_overtones_exist
+
+                            is_zero_frequency = (omega1 + omega2).real == 0
+
+                            if passes_wigner_3j_rules and is_not_repeat and lower_overtones_exist and not (self.exclude_zero_frequency_QNMs and is_zero_frequency):
+                                d_omega = abs((omega1 + omega2) - damped_sinusoid.omega)
+                                if d_omega < min_d_omega:
+                                    QNM = ringdown.QNM(
+                                        sorted([(L1, M1, N1, S1), (L2, M2, N2, S2)]),
+                                        damped_sinusoid.target_mode,
+                                    )
+                                    min_d_omega = d_omega
+
+                            if not self.include_3rd_order_QNMs:
                                 continue
 
-                            if self.exclude_zero_frequency_QNMs:
-                                if (omega1 + omega2).real == 0:
-                                    continue
+                            for L3, M3, N3, S3 in first_order_QNMs:
+                                # wigner 3j rules (missing some)
+                                passes_wigner_3j_rules = True
+                                if (
+                                        M1 + M2 + M3 != damped_sinusoid.target_mode[1]
+                                ): 
+                                    passes_wigner_3j_rules = False
 
-                            d_omega = abs((omega1 + omega2) - damped_sinusoid.omega)
-                            if d_omega < min_d_omega:
-                                QNM = ringdown.QNM(
-                                    sorted([(L1, M1, N1, S1), (L2, M2, N2, S2)]),
-                                    damped_sinusoid.target_mode,
+                                omega3 = ringdown.omega_and_C(
+                                    (L3, M3, N3, S3), (L3, M3), self.M_f, self.chi_f
+                                )[0]
+                                
+                                # no repeats
+                                is_not_repeat = not (
+                                    sorted([(L1, M1, N1, S1), (L2, M2, N2, S2), (L3, M3, N3, S3)])
+                                    in third_order_QNMs
                                 )
-                                min_d_omega = d_omega
+                                
+                                # lower overtones must exist
+                                lower_overtones_exist = False
+                                for third_order_QNM in third_order_QNMs:
+                                    L1_test, M1_test, N1_test, S1_test = third_order_QNM[0]
+                                    L2_test, M2_test, N2_test, S2_test = third_order_QNM[1]
+                                    L3_test, M3_test, N3_test, S3_test = third_order_QNM[2]
+                                    if (
+                                            L1_test == L1
+                                            and M1_test == M1
+                                            and S1_test == S1
+                                            and L2_test == L2
+                                            and M2_test == M2
+                                            and S2_test == S2
+                                            and L3_test == L3
+                                            and M3_test == M3
+                                            and S3_test == S3
+                                    ):
+                                        total_d_N = (N1_test - N1) + (N2_test - N2) + (N3_test - N3)
+                                        if total_d_N == 1:
+                                            lower_overtones_exist = True
+
+                                lower_overtones_exist = (N1 == 0 and N2 == 0 and N3 == 0) or lower_overtones_exist
+                                
+                                if passes_wigner_3j_rules and is_not_repeat and lower_overtones_exist:
+                                    d_omega = abs((omega1 + omega2 + omega3) - damped_sinusoid.omega)
+                                    if d_omega < min_d_omega:
+                                        QNM = ringdown.QNM(
+                                            sorted([(L1, M1, N1, S1), (L2, M2, N2, S2), (L3, M3, N3, S3)]),
+                                            damped_sinusoid.target_mode,
+                                        )
+                                        min_d_omega = d_omega
 
         if min_d_omega < self.frequency_tolerance:
             if self.verbose:
@@ -701,7 +770,7 @@ class QNMModelBuilder:
                 try:
                     print(
                         "* previous windows passed:",
-                        np.all(np.diff(QNM_stable_windows)[-d_N_QNMs:] > 0),
+                        np.all(np.diff(QNM_stable_windows)[:-d_N_QNMs] > 0),
                     )
                     for i in range(len(QNM_stable_windows[:-d_N_QNMs])):
                         if not np.diff(QNM_stable_windows[i]) > 0:
@@ -752,6 +821,8 @@ class QNMModelBuilder:
                     + f"* d_t_0 = {self.d_t_0}\n"
                     + f"* d_t_0_search = {self.d_t_0_search}\n"
                     + f"* fit_news = {self.fit_news}\n"
+                    + f"* include_2nd_order_QNMs = {self.include_2nd_order_QNMs}\n"
+                    + f"* include_3rd_order_QNMs = {self.include_3rd_order_QNMs}\n"
                     + f"* max_N_free_frequencies = {self.max_N_free_frequencies}\n"
                     + f"* power_tolerance = {self.power_tolerance}\n"
                     + f"* CV_tolerance = {self.CV_tolerance}\n"

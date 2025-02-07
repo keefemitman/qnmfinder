@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from . import ringdown
 
 
-def plot_amplitudes_and_phases(QNM_model, plot_mirror_modes=False, plot_phases=True, vert_limits=None):
+def plot_amplitudes_and_phases(QNM_model, plot_mirror_modes=False, plot_phases=True, hor_limits=None, vert_limits=None):
     """Plot time-dependent amplitudes and phases of a ringdown.QNMModel.
 
     Parameters
@@ -17,6 +17,9 @@ def plot_amplitudes_and_phases(QNM_model, plot_mirror_modes=False, plot_phases=T
     plot_phases : bool
         whether or not to plot the phases.
         [Default: True]
+    hor_limits : tuple
+        horizontal axis limits.
+        [Default: None]
     vert_limits : tuple
         vertical axis limits.
         [Default: None]
@@ -69,6 +72,8 @@ def plot_amplitudes_and_phases(QNM_model, plot_mirror_modes=False, plot_phases=T
         axis[idx].plot([None], [None], lw=0.5, label=str(QNM.mode))
 
     axis[0].set_yscale("log")
+    for i in range(idx):
+        axis[i].set_xlim(hor_limits)
     axis[0].set_ylim(vert_limits)
     axis[idx].legend(loc="upper left")
 
