@@ -801,7 +801,7 @@ class QNMModelBuilder:
         # iterate over fitting start times
         t_0 = self.t_0_f
         self.latest_t_0s = [self.t_0_f]
-        self.latest_t_0s_modes = [None]
+        self.latest_t_0s_ms = [None]
 
         print(
             colored(
@@ -877,7 +877,7 @@ class QNMModelBuilder:
 
                         self.latest_t_0s.append(t_0)
 
-                        self.latest_t_0s_modes.append(mode_to_model)
+                        self.latest_t_0s_ms.append(self.mode_to_model[1])
 
             if self.verbose:
                 if mode_to_model != self.mode_to_model:
@@ -933,18 +933,13 @@ class QNMModelBuilder:
             self.update_model(QNM_model)
 
             # update latest_t_0s
-            latest_t_0s = [self.t_0_f]
-            latest_t_0s_modes = [None]
-            for i, latest_t_0_mode in enumerate(latest_t_0s_modes):
-                if latest_t_0_mode is None or latest_t_0_mode == mode_to_model:
-                    continue
-
-                latest_t_0s.append(latest_t_0s[i])
-                latest_t_0s_modes.append(latest_t_0_mode)
-
-            self.latest_t_0s = latest_t_0s
-            self.latest_t_0s_modes = latest_t_0s_modes
-
+            try:
+                last_index_of_mode_to_model = [idx for idx, mode in enumerate(self.latest_t_0s_ms) if m == mode_to_model[1]][-1]
+                self.latest_t_0s = self.latest_t_0s[:last_index_of_mode_to_model]
+                self.latest_t_0s_ms = self.latest_t_0s_ms[:last_index_of_mode_to_model]
+            except:
+                pass
+            
             # try mirror QNM(s)
             if self.try_mirrors:
                 QNM_model = QNM_model.copy()
@@ -983,22 +978,17 @@ class QNMModelBuilder:
                     self.update_model(QNM_model)
 
                     # update latest_t_0s
-                    latest_t_0s = [self.t_0_f]
-                    latest_t_0s_modes = [None]
-                    for i, latest_t_0_mode in enumerate(latest_t_0s_modes):
-                        if latest_t_0_mode is None or latest_t_0_mode == mode_to_model:
-                            continue
-
-                        latest_t_0s.append(latest_t_0s[i])
-                        latest_t_0s_modes.append(latest_t_0_mode)
-
-                    self.latest_t_0s = latest_t_0s
-                    self.latest_t_0s_modes = latest_t_0s_modes
+                    try:
+                        last_index_of_mode_to_model = [idx for idx, m in enumerate(self.latest_t_0s_ms) if m == -mode_to_model[1]][-1]
+                        self.latest_t_0s = self.latest_t_0s[:last_index_of_mode_to_model]
+                        self.latest_t_0s_ms = self.latest_t_0s_ms[:last_index_of_mode_to_model]
+                    except:
+                        pass
                     
             t_0 = self.latest_t_0s[-1]
 
         del self.latest_t_0s
-        del self.latest_t_0s_modes
+        del self.latest_t_0s_ms
 
     def build_model_iteratively(self):
         """Build QNM model iteratively."""
