@@ -875,9 +875,10 @@ class QNMModelBuilder:
                     else:
                         self.N_free_frequencies = 1
 
-                        self.latest_t_0s.append(t_0)
-
-                        self.latest_t_0s_ms.append(self.mode_to_model[1])
+                        if self.mode_to_model is not None:
+                            self.latest_t_0s.append(t_0)
+                            
+                            self.latest_t_0s_ms.append(self.mode_to_model[1])
 
             if self.verbose:
                 if mode_to_model != self.mode_to_model:
