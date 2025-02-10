@@ -258,7 +258,7 @@ class QNMModelBuilder:
         # fix NR waveform so t_peak = time of peak
         self.h_NR.t *= self.M_total
         self.h_NR.t -= self.compute_t_peak(self.t_peak_norm_function)
-        self.h_NR = self.h_NR[
+        self.h_NR_fit = self.h_NR.copy()[
             np.argmin(abs(self.h_NR.t - self.t_i)) : np.argmin(
                 abs(self.h_NR.t - self.t_f)
             )
@@ -267,12 +267,10 @@ class QNMModelBuilder:
         ]
 
         if self.fit_news:
-            h_NR_news = self.h_NR.copy()
+            h_NR_news = self.h_NR_fit.copy()
             h_NR_news.data = h_NR_news.data_dot
             h_NR_news.dataType = scri.hdot
             self.h_NR_fit = h_NR_news
-        else:
-            self.h_NR_fit = self.h_NR.copy()
 
         # construct t0s
         self.t_0s = np.arange(self.t_i, self.t_0_f + self.d_t_0, self.d_t_0)
