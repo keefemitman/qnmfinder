@@ -32,6 +32,9 @@ class QNMModelBuilder:
     t_f : float
         latest time (relative to peak) to fit.
         [Default: 100.]
+    t_0_i : float
+        first start time (relative to peak) to fit; if None, matches t_0_f.
+        [Default: None]
     t_0_f : float
         latest start time (relative to peak) to fit.
         [Default: 80.]
@@ -132,6 +135,7 @@ class QNMModelBuilder:
         chi_f,
         t_i=0,
         t_f=100,
+        t_0_i=None,
         t_0_f=80,
         t_peak_norm_function='news',
         d_t_0=1.0,
@@ -194,6 +198,9 @@ class QNMModelBuilder:
         self.t_i = t_i
         self.t_f = t_f
         self.t_peak_norm_function = t_peak_norm_function
+        if t_0_i is None:
+            t_0_i = t_0_f
+        self.t_0_i = t_0_i
         self.t_0_f = t_0_f
         if d_t_0 < min(np.diff(self.h_NR.t)):
             print(
@@ -482,10 +489,10 @@ class QNMModelBuilder:
             QNM.mode for QNM in self.QNM_model.QNMs if QNM.is_first_order_QNM
         ]
         second_order_QNMs = [
-            QNM.mode for QNM in self.QNM_model.QNMs if not QNM.is_first_order_QNM and len(QNM.mode) == 2
+            (QNM.mode, QNM.target_mode) for QNM in self.QNM_model.QNMs if not QNM.is_first_order_QNM and len(QNM.mode) == 2
         ]
         third_order_QNMs = [
-            QNM.mode for QNM in self.QNM_model.QNMs if not QNM.is_first_order_QNM and len(QNM.mode) == 3
+            (QNM.mode, QNM.target_mode) for QNM in self.QNM_model.QNMs if not QNM.is_first_order_QNM and len(QNM.mode) == 3
         ]
         for L1 in range(self.ell_min_QNM, self.ell_max_QNM + 1):
             if self.include_2nd_order_QNMs:
@@ -530,11 +537,13 @@ class QNMModelBuilder:
                                 continue
 
                         for L2, M2, N2, S2 in first_order_QNMs:
-                            # wigner 3j rules
+                            # wigner 3j rules;
+                            # note that the restriction L1 + L2 >= damped_sinusoid.target_mode[0]
+                            # is not applied, since we expect 2nd order QNMs to mix
+                            # to higher \ell modes
                             passes_wigner_3j_rules = True
                             if (
                                 not damped_sinusoid.target_mode[0] >= abs(L1 - L2)
-                                and damped_sinusoid.target_mode[0] <= L1 + L2
                             ):
                                 passes_wigner_3j_rules = False
                             if (
@@ -555,14 +564,17 @@ class QNMModelBuilder:
                             )[0]
 
                             # no repeats
-                            is_not_repeat = not (
-                                sorted([(L1, M1, N1, S1), (L2, M2, N2, S2)])
-                                in second_order_QNMs
-                            )
+                            is_not_repeat = True
+                            for second_order_QNM, target_mode in second_order_QNMs:
+                                if (
+                                        sorted([(L1, M1, N1, S1), (L2, M2, N2, S2)]) == second_order_QNM
+                                        and damped_sinusoid.target_mode == target_mode
+                                ):
+                                    is_not_repeat = False
 
                             # lower overtones must exist
                             lower_overtones_exist = False
-                            for second_order_QNM in second_order_QNMs:
+                            for second_order_QNM, target_mode in second_order_QNMs:
                                 L1_test, M1_test, N1_test, S1_test = second_order_QNM[0]
                                 L2_test, M2_test, N2_test, S2_test = second_order_QNM[1]
                                 if (
@@ -572,6 +584,7 @@ class QNMModelBuilder:
                                     and L2_test == L2
                                     and M2_test == M2
                                     and S2_test == S2
+                                    and target_mode == damped_sinusoid.target_mode
                                 ):
                                     total_d_N = (N1_test - N1) + (N2_test - N2)
                                     if total_d_N == 1:
@@ -606,10 +619,13 @@ class QNMModelBuilder:
                                 )[0]
                                 
                                 # no repeats
-                                is_not_repeat = not (
-                                    sorted([(L1, M1, N1, S1), (L2, M2, N2, S2), (L3, M3, N3, S3)])
-                                    in third_order_QNMs
-                                )
+                                is_not_repeat = True
+                                for third_order_QNM, target_mode in third_order_QNMs:
+                                    if (
+                                            sorted([(L1, M1, N1, S1), (L2, M2, N2, S2), (L3, M3, N3, S3)]) == third_order_QNM
+                                            and damped_sinusoid.target_mode == target_mode
+                                    ):
+                                        is_not_repeat = False
                                 
                                 # lower overtones must exist
                                 lower_overtones_exist = False
@@ -799,8 +815,8 @@ class QNMModelBuilder:
     def build_model(self):
         """Build QNM model."""
         # iterate over fitting start times
-        t_0 = self.t_0_f
-        self.latest_t_0s = [self.t_0_f]
+        t_0 = self.t_0_i
+        self.latest_t_0s = [self.t_0_i]
         self.latest_t_0s_ms = [None]
 
         print(
