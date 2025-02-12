@@ -111,7 +111,7 @@ class QNMModelBuilder:
         [Default: 10.0]
     min_A_tolerance : float
         minimum amplitude to consider during stability tests.
-        [Default: 0.]
+        [Default: 1.e-12.]
     reset_after_adding_QNM : bool
         whether or not to reset the fitting start time iteration
         after successfully adding a new QNM to the model.
@@ -163,7 +163,7 @@ class QNMModelBuilder:
         CV_tolerance=5.0e-2,
         min_t_0_window=None,
         min_t_0_window_factor=10.0,
-        min_A_tolerance=0.,
+        min_A_tolerance=1e-12,
         reset_after_adding_QNM=True,
         preexisting_model=None,
         n_procs="auto",
