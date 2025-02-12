@@ -356,8 +356,24 @@ class QNMModelBuilder:
         """
         self.QNM_model = QNM_model
 
-        self.failed_QNM_modes = []
+        if hasattr(self, 'failed_QNM_modes'):
+            failed_QNM_modes_filtered = []
+            if not self.mode_to_model is None:
+                for QNM_mode in self.failed_QNM_modes:
+                    if type(QNM_mode[0]) != list:
+                        target_m = QNM_mode[0][1]
+                    else:
+                        target_m = np.sum([mode[1] for mode in QNM_mode[0]])
+                        
+                    if target_m == self.mode_to_model[1]:
+                        continue
+                    
+                    failed_QNM_modes_filtered.append(QNM_mode)
 
+            self.failed_QNM_modes = failed_QNM_modes_filtered
+        else:
+            self.failed_QNM_modes = []
+                
         self.mode_to_model = None
 
         self.N_free_frequencies = 1
