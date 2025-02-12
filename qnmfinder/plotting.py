@@ -1,8 +1,9 @@
+import itertools
 import numpy as np
 import matplotlib.pyplot as plt
+from scri.asymptotic_bondi_data.map_to_superrest_frame import MT_to_WM, WM_to_MT
 
 from . import ringdown
-
 
 def plot_amplitudes_and_phases(QNM_model, plot_mirror_modes=False, plot_phases=True, hor_limits=None, vert_limits=None):
     """Plot time-dependent amplitudes and phases of a ringdown.QNMModel.
@@ -188,3 +189,123 @@ def plot_free_frequency_evolution(
     c.set_label(r"$t_{0}$")
 
     plt.show()
+
+def flip(items, ncol):
+    return itertools.chain(*[items[i::ncol] for i in range(ncol)])
+
+def plot_status(QNM_model_builder, t_0, mode, N_f, save_ID):
+    """Plot the free frequency evolution of a ringdown.QNMModel.
+
+    Parameters
+    ----------
+    QNM_model_builder: qnm_model.QNMModelBuilder
+        QNM_model_builder containing the current model status.
+    t_0 : float
+        fitting start time.
+    mode : tuple
+        (\ell, m) mode being fit to.
+    N_f : int
+        number of free frequencies bint fit.
+    save_ID : int
+        ID to append to file name.
+    """
+    fig, axis = plt.subplot_mosaic(
+        [["A","B"],["C","B"]],
+        figsize=(7.0625, 0.5*7.0625),
+        width_ratios=[1, 0.8],
+        height_ratios=[1, 0.6],
+    )
+    plt.subplots_adjust(hspace=0, wspace=0.02)
+    idx2 = -1 #np.argmin(abs(QNM_model_builder.h_NR_fit.t - 65))
+    axis["A"].plot(
+        QNM_model_builder.h_NR_fit.t[:idx2],
+        MT_to_WM(WM_to_MT(QNM_model_builder.h_NR_fit), sxs_version=True).evaluate(np.pi/3, 0)[:idx2].real,
+        lw=1, color='k', label='$h_{\mathrm{NR}}$'
+    )
+    axis["A"].plot(
+        QNM_model_builder.h_QNM_fit.t[:idx2],
+        MT_to_WM(WM_to_MT(QNM_model_builder.h_QNM_fit), sxs_version=True).evaluate(np.pi/3, 0)[:idx2].real,
+        lw=1, color='orange', ls='--', label='$h_{\mathrm{QNM}}$'
+    )
+
+    axis["A"].axvline(
+        t_0,
+        color='purple',
+        lw=1.2,
+        alpha=0.4
+    )
+
+    for QNM in QNM_model_builder.QNM_model.QNMs:
+        if QNM.target_mode[1] < 0:
+            continue
+        p = axis["B"].plot(
+            QNM_model_builder.t_0s,
+            abs(
+                QNM.A_time_series
+                * np.exp(-1j * QNM.omega * QNM_model_builder.t_0s)
+            ),
+            lw=0.5,
+            label=str(QNM.mode).replace("),", "),\n ")
+        )
+    
+        idx1 = np.argmin(abs(QNM_model_builder.t_0s - QNM.stable_window[0]))
+        idx2 = np.argmin(abs(QNM_model_builder.t_0s - QNM.stable_window[1])) + 1
+        axis["B"].plot(
+            QNM_model_builder.t_0s[idx1:idx2],
+            abs(
+                QNM.A_time_series
+            * np.exp(-1j * QNM.omega * QNM_model_builder.t_0s)
+            )[idx1:idx2],
+            lw=2,
+            color=p[0].get_color(),
+        )
+    
+    axis["B"].set_yscale("log")
+
+    idx2 = np.argmin(abs(QNM_model_builder.h_NR_fit.t - 65))
+    h_QNM = QNM_model_builder.QNM_model.compute_waveform(QNM_model_builder.h_NR_fit)
+    axis["C"].plot(
+        QNM_model_builder.h_NR_fit.t[:idx2],
+        abs(
+            MT_to_WM(WM_to_MT(QNM_model_builder.h_residual_fit), sxs_version=True).evaluate(np.pi/3, 0)[:idx2]
+        ),
+        lw=1,
+        color='k'
+    )
+    axis["C"].set_yscale("log")
+
+    axis["B"].yaxis.tick_right()
+
+    h_max = np.max(MT_to_WM(WM_to_MT(QNM_model_builder.h_NR_fit), sxs_version=True).evaluate(np.pi/3, 0)[:idx2].real)
+    h_min = np.min(MT_to_WM(WM_to_MT(QNM_model_builder.h_NR_fit), sxs_version=True).evaluate(np.pi/3, 0)[:idx2].real)
+    axis["A"].set_ylim(h_min - 0.1 * (h_max - h_min), h_max + 0.1 * (h_max - h_min))
+    axis["B"].set_xlim(right=QNM_model_builder.t_0s[-1] + 0.8 * (QNM_model_builder.t_0s[-1] - QNM_model_builder.t_0s[0]))
+    axis["B"].set_ylim(1e-8, 8)
+    axis["C"].set_ylim(2e-8, 0.8)
+
+    axis["A"].legend(loc='upper right', frameon=True, framealpha=1)    
+
+    h, l = axis["B"].get_legend_handles_labels()
+
+    axis["B"].legend(
+        h, l,
+        loc="upper right",
+        frameon=False,
+        ncol=1,
+        fontsize=6
+    )
+
+    axis["A"].set_ylabel(r"$\mathrm{Re}[h(\theta=\pi/3,\phi=0)]$")
+    axis["C"].set_ylabel(r"residual")
+    axis["C"].set_xlabel(r"$(t-t_{\mathrm{peak\,luminosity}})/M$")
+    axis["B"].set_xlabel(r"$(t_{0}-t_{\mathrm{peak\,luminosity}})/M$")
+
+    axis["A"].set_title("status: analyzing $" + str(mode) + "$ mode with $N_{f}=" + str(N_f) + "$", loc='left', fontsize=10)
+    axis["B"].set_title("QNM Model Amplitudes", fontsize=10)
+
+    fig.align_ylabels()
+
+    save_ID = "{:06d}".format(save_ID)
+    plt.savefig(f"animations/plot_{save_ID}.png")
+
+    plt.clf()

@@ -7,6 +7,7 @@ from quaternion.calculus import indefinite_integral as integrate
 
 from . import utils
 from . import ringdown
+from . import plotting
 
 import multiprocessing
 
@@ -53,7 +54,7 @@ class QNMModelBuilder:
         [Default: 2]
     ell_max_NR : int
         maximum QNM \ell value to consider.
-        [Default: 6]
+        [Default: 4]
     modes : list
         (\ell, m) modes of NR waveform to fit.
         [Default: use all modes.]
@@ -97,7 +98,7 @@ class QNMModelBuilder:
         [Default : 1.e-12]
     frequency_tolerance : float
         minimum modulus to match free frequency to QNM frequency.
-        [Default: 1.e-1]
+        [Default: 2.e-1]
     CV_tolerance : float
         minimum coefficient of variation to QNM to be considered stable.
         [Default: 5.e-2]
@@ -125,6 +126,9 @@ class QNMModelBuilder:
     verbose : bool
         whether or not to print status updates.
         [Default: False]
+    plot_status : bool
+        whether or not to plot the model status for animation.
+        [Default: False]
     """
 
     def __init__(
@@ -141,7 +145,7 @@ class QNMModelBuilder:
         d_t_0=1.0,
         d_t_0_search=1.0,
         ell_min_NR=2,
-        ell_max_NR=6,
+        ell_max_NR=4,
         modes=None,
         fit_news=True,
         ell_min_QNM=2,
@@ -155,7 +159,7 @@ class QNMModelBuilder:
         t_ref=0.0,
         max_N_free_frequencies=4,
         power_tolerance=1.0e-12,
-        frequency_tolerance=1.0e-1,
+        frequency_tolerance=2.0e-1,
         CV_tolerance=5.0e-2,
         min_t_0_window=None,
         min_t_0_window_factor=10.0,
@@ -164,6 +168,7 @@ class QNMModelBuilder:
         preexisting_model=None,
         n_procs="auto",
         verbose=False,
+        plot_status=False
     ):
         if type(h_NR) != scri.waveform_modes.WaveformModes:
             try:
@@ -254,6 +259,7 @@ class QNMModelBuilder:
         self.reset_after_adding_QNM = reset_after_adding_QNM
         self.n_procs = n_procs
         self.verbose = verbose
+        self.plot_status = plot_status
 
         # fix NR waveform so t_peak = time of peak
         self.h_NR.t *= self.M_total
@@ -536,25 +542,13 @@ class QNMModelBuilder:
 
                         for L2, M2, N2, S2 in first_order_QNMs:
                             # wigner 3j rules;
-                            # note that the restriction L1 + L2 >= damped_sinusoid.target_mode[0]
+                            # note that the restriction \ell values
                             # is not applied, since we expect 2nd order QNMs to mix
-                            # to higher \ell modes
+                            # to higher and lower \ell modes
                             passes_wigner_3j_rules = True
-                            if (
-                                not damped_sinusoid.target_mode[0] >= abs(L1 - L2)
-                            ):
-                                passes_wigner_3j_rules = False
                             if (
                                 M1 + M2 != damped_sinusoid.target_mode[1]
                             ): 
-                                passes_wigner_3j_rules = False
-                            if (
-                                damped_sinusoid.target_mode[1] == M1
-                                and M1 == M2
-                                and M2 == 0
-                                and not (L1 + L2 + damped_sinusoid.target_mode[0]) % 2
-                                == 0
-                            ):
                                 passes_wigner_3j_rules = False
 
                             omega2 = ringdown.omega_and_C(
@@ -605,7 +599,7 @@ class QNMModelBuilder:
                                 continue
 
                             for L3, M3, N3, S3 in first_order_QNMs:
-                                # wigner 3j rules (missing some)
+                                # wigner 3j rules (with some ignored, see above)
                                 passes_wigner_3j_rules = True
                                 if (
                                         M1 + M2 + M3 != damped_sinusoid.target_mode[1]
@@ -816,6 +810,7 @@ class QNMModelBuilder:
         t_0 = self.t_0_i
         self.latest_t_0s = [self.t_0_i]
         self.latest_t_0s_ms = [None]
+        self.plot_count = 0
 
         print(
             colored(
@@ -852,6 +847,7 @@ class QNMModelBuilder:
 
             # find most unmodeled mode, by power
             mode_to_model, LMs_and_power = self.find_most_unmodeled_mode(t_0)
+            
             if LMs_and_power[0][1] < self.power_tolerance:
                 if self.verbose:
                     print(
@@ -903,6 +899,14 @@ class QNMModelBuilder:
                     print()
 
             self.mode_to_model = mode_to_model
+
+            if self.plot_status:
+                N_count = 1
+                if self.plot_count > 0 and t_0 == self.latest_t_0s[-1] and self.N_free_frequencies == 1:
+                    N_count = 5
+                for i in range(N_count):
+                    plotting.plot_status(self, t_0, self.mode_to_model, self.N_free_frequencies, self.plot_count)
+                    self.plot_count += 1
 
             # find best fitting QNM to said model; if no match, continue
             QNM_model = self.find_best_fitting_QNM(
