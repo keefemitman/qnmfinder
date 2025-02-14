@@ -719,6 +719,7 @@ class QNMModelBuilder:
             self.t_f,
             self.t_ref,
             N_free_frequencies=N_free_frequencies,
+            n_procs=self.n_procs
         )
         if fit_QNM_model_filtered is None:
             return False

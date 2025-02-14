@@ -23,7 +23,8 @@ if __name__=='__main__':
               'scipy>=1.13.1',
               'scri>=2022.9.0',
               'sxs>=2024.0.27',
-              'termcolor>=2.5.0'
+              'termcolor>=2.5.0',
+              'joblib>=1.4.2'
           ],
           classifiers=[
               "Intended Audience :: Science/Research",
