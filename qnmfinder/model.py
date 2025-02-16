@@ -637,7 +637,7 @@ class QNMModelBuilder:
                                 
                                 # lower overtones must exist
                                 lower_overtones_exist = False
-                                for third_order_QNM in third_order_QNMs:
+                                for third_order_QNM, target_mode in third_order_QNMs:
                                     L1_test, M1_test, N1_test, S1_test = third_order_QNM[0]
                                     L2_test, M2_test, N2_test, S2_test = third_order_QNM[1]
                                     L3_test, M3_test, N3_test, S3_test = third_order_QNM[2]
