@@ -961,7 +961,8 @@ class QNMModel:
                 zip(
                     [non_QNM_damped_sinusoid.omega.real for non_QNM_damped_sinusoid in fit_QNM_model.non_QNM_damped_sinusoids],
                     fit_QNM_model.non_QNM_damped_sinusoids
-                )
+                ),
+                key=lambda pair: pair[0]
             )
         ]
 
