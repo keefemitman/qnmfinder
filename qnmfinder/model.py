@@ -475,12 +475,6 @@ class QNMModelBuilder:
             self.h_residual_fit.t[idx_t_0:],
             axis=0,
         )[-1]/(self.h_residual_fit.t[idx_t_0:][-1] - self.h_residual_fit.t[idx_t_0:][0])
-
-        print(unmodeled_power.shape)
-        print(self.h_residual_fit.LM.shape)
-        print(unmodeled_power)
-        print(self.h_residual_fit.LM)
-        print(self.h_residual_fit.LM[mode_indices])
         
         LMs_ranked = [
             x
