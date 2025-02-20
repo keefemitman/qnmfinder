@@ -90,7 +90,7 @@ class QNMModelBuilder:
     t_ref : float
         reference time (relative to peak) for QNM amplitudes.
         [Default: 0.]
-    max_N_free_frequencies : int
+    N_free_frequencies_max : int
         maximum number of free frequencies to fit if one fails.
         [Default: 4]
     power_tolerance : float
@@ -157,7 +157,7 @@ class QNMModelBuilder:
         require_1st_order_QNM_existence=True,
         exclude_zero_frequency_QNMs=True,
         t_ref=0.0,
-        max_N_free_frequencies=4,
+        N_free_frequencies_max=4,
         power_tolerance=1.0e-12,
         frequency_tolerance=2.0e-1,
         CV_tolerance=5.0e-2,
@@ -249,7 +249,7 @@ class QNMModelBuilder:
         self.require_1st_order_QNM_existence = require_1st_order_QNM_existence
         self.exclude_zero_frequency_QNMs = exclude_zero_frequency_QNMs
         self.t_ref = t_ref
-        self.max_N_free_frequencies = max_N_free_frequencies
+        self.N_free_frequencies_max = N_free_frequencies_max
         self.power_tolerance = power_tolerance
         self.frequency_tolerance = frequency_tolerance
         self.CV_tolerance = CV_tolerance
@@ -491,14 +491,66 @@ class QNMModelBuilder:
         unmodeled_mode = tuple(LMs_ranked[0])
 
         return unmodeled_mode, LMs_and_power
+
+    def verify_set_of_QNMs(self, QNMs):
+        """Verify that a set of QNMs (created via match_damped_sinusoid_to_QNM)
+        respects the requirement that overtones are added sequentially.
+
+        Parameters
+        ----------
+        QNMs : list of ringdown.QNM
+            list of QNMs output by match_damped_sinusoid_to_QNM.
+
+        Returns
+        -------
+        is_valid : bool
+            whether or not the set of QNMs respects the sequential overtone requirement.
+        """
+        is_valid = True
+
+        for QNM1 in QNMs:
+            if QNM1.is_first_order_QNM:
+                L1, M1, N1, S1 = QNM1.mode
+
+                overtone_values = []
+                for QNM2 in [
+                        QNM for QNM in self.QNM_model.QNMs + QNMs if QNM.is_first_order_QNM
+                        and QNM.mode[0] == L1 and QNM.mode[1] == M1 and QNM.mode[3] == S1
+                ]:
+                    overtone_values.append(QNM2.mode[2])
+                max_overtone_value = max(overtone_values)
+                
+                for N in range(max_overtone_value):
+                    if not N in overtone_values:
+                        is_valid = False
+            else:
+                for i, QNM in enumerate(QNM1.mode):
+                    L1, M1, N1, S1 = QNM
+                    
+                    overtone_values = []
+                    for QNM2 in [
+                            QNM for QNM in self.QNM_model.QNMs + QNMs if not QNM.is_first_order_QNM
+                            and QNM.mode[i][0] == L1 and QNM.mode[i][1] == M1 and QNM.mode[i][3] == S1
+                    ]:
+                        overtone_values.append(QNM2.mode[i][2])
+                    max_overtone_value = max(overtone_values)
+                    
+                    for N in range(max_overtone_value):
+                        if not N in overtone_values:
+                            is_valid = False
+
+        return is_valid
         
-    def match_damped_sinusoid_to_QNM(self, damped_sinusoid):
+        
+    def match_damped_sinusoid_to_QNM(self, damped_sinusoid, N_damped_sinusoids=1):
         """Match a damped sinusoid to a QNM.
 
         Parameters
         ----------
         damped_sinusoid : ringdown.DampedSinusoid
             damped sinusoid to match to a QNM.
+        N_damped_sinusoids : int
+            number of damped sinusoids being matched to QNMs.
 
         Returns
         -------
@@ -537,12 +589,8 @@ class QNMModelBuilder:
                         # lower overtones must exist
                         lower_overtones_exist = True
                         if N1 != 0:
-                            lower_overtones_exist = (
-                                L1,
-                                M1,
-                                N1 - 1,
-                                S1,
-                            ) in first_order_QNMs
+                            max_N_in_first_order_QNMs = len([N for L, M, N, S in first_order_QNMs if L == L1 and M == M1 and S == S1]) - 1
+                            lower_overtones_exist = (N1 - N_damped_sinusoids) <= max_N_in_first_order_QNMs
 
                         if is_not_repeat and m_value_matches and lower_overtones_exist:
                             d_omega = abs(omega1 - damped_sinusoid.omega)
@@ -595,8 +643,7 @@ class QNMModelBuilder:
                                     and S2_test == S2
                                     and target_mode == damped_sinusoid.target_mode
                                 ):
-                                    total_d_N = (N1_test - N1) + (N2_test - N2)
-                                    if total_d_N == 1:
+                                    if (N1 - N1_test) + (N2 - N2_test) <= N_damped_sinusoids:
                                         lower_overtones_exist = True
 
                             lower_overtones_exist = (N1 == 0 and N2 == 0) or lower_overtones_exist
@@ -654,7 +701,7 @@ class QNMModelBuilder:
                                             and S3_test == S3
                                     ):
                                         total_d_N = (N1_test - N1) + (N2_test - N2) + (N3_test - N3)
-                                        if total_d_N == 1:
+                                        if total_d_N <= N_damped_sinusoids:
                                             lower_overtones_exist = True
 
                                 lower_overtones_exist = (N1 == 0 and N2 == 0 and N3 == 0) or lower_overtones_exist
@@ -726,16 +773,21 @@ class QNMModelBuilder:
             return False
 
         QNMs = [
-            self.match_damped_sinusoid_to_QNM(non_QNM_damped_sinusoid)
+            self.match_damped_sinusoid_to_QNM(non_QNM_damped_sinusoid, N_free_frequencies)
             for non_QNM_damped_sinusoid in fit_QNM_model_filtered.non_QNM_damped_sinusoids
         ]
 
         if np.all([not QNM is None for QNM in QNMs]):
             if len(QNMs) > 1:
+                # QNMs can't appear twice
                 QNM_modes = [QNM.mode for QNM in QNMs]
                 for QNM_mode in QNM_modes:
                     if QNM_modes.count(QNM_mode) > 1:
                         return False
+
+                # QNMs must have sequential overtones
+                if not self.verify_set_of_QNMs(QNMs):
+                    return False
 
             QNM_model = ringdown.QNMModel(
                 self.M_f, self.chi_f, self.QNM_model.QNMs + QNMs
@@ -801,7 +853,7 @@ class QNMModelBuilder:
                     for i in range(len(QNM_stable_windows[:-d_N_QNMs])):
                         if not np.diff(QNM_stable_windows[i]) > 0:
                             print(
-                                f"{QNM_model.QNMs[i].mode}: {QNM_stable_windows[i]} vs. {self.previous_QNM_stable_windows[i]}"
+                                f"{QNM_model.QNMs[i].mode}: {QNM_stable_windows[i]} vs. {self.previous_QNM_stable_windows[i]}, CV = {QNM_model.QNMs[i].CV}"
                             )
                 except:
                     pass
@@ -850,7 +902,7 @@ class QNMModelBuilder:
                     + f"* fit_news = {self.fit_news}\n"
                     + f"* include_2nd_order_QNMs = {self.include_2nd_order_QNMs}\n"
                     + f"* include_3rd_order_QNMs = {self.include_3rd_order_QNMs}\n"
-                    + f"* max_N_free_frequencies = {self.max_N_free_frequencies}\n"
+                    + f"* N_free_frequencies_max = {self.N_free_frequencies_max}\n"
                     + f"* power_tolerance = {self.power_tolerance}\n"
                     + f"* CV_tolerance = {self.CV_tolerance}\n"
                     + f"* min_t_0_window_factor = {self.min_t_0_window_factor}\n"
@@ -878,14 +930,14 @@ class QNMModelBuilder:
                 t_0 -= self.d_t_0_search
                 continue
 
-            if self.max_N_free_frequencies > 1:
+            if self.N_free_frequencies_max > 1:
                 if abs(t_0 - self.t_i) < self.d_t_0_search or (
                     not self.mode_to_model is None
                     and self.mode_to_model != mode_to_model
                 ):
                     # change fit to include two free damped sinusoids
                     # since we've failed to fit self.mode_to_model
-                    if self.N_free_frequencies < self.max_N_free_frequencies:
+                    if self.N_free_frequencies < self.N_free_frequencies_max:
                         if self.verbose:
                             print(
                                 colored(

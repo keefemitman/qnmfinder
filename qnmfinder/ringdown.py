@@ -891,18 +891,16 @@ class QNMModel:
             if len(initial_guess) != 2 * N_free_frequencies:
                 raise ValueError(f"Initial guess = {initial_guess} must be of length 2 * N_free_frequencies = {2 * N_free_frequencies}")
         else:
-            if N_free_frequencies == 1:
-                initial_guess = np.array([0.5, -0.2])
-            elif N_free_frequencies == 2:
-                initial_guess = np.array([0.5, -0.2, -0.5, -0.2])
-            elif N_free_frequencies == 3:
-                initial_guess = np.array([0.5, -0.2, -0.5, -0.2, 0.0, -0.2])
-            elif N_free_frequencies == 4:
-                initial_guess = np.array([0.5, -0.2, -0.5, -0.2, 0.0, -0.2, 0.5, -0.4])
-            elif N_free_frequencies == 5:
-                initial_guess = np.array([0.5, -0.2, -0.5, -0.2, 0.0, -0.2, 0.5, -0.4, -0.5, -0.4])
-            elif N_free_frequencies == 6:
-                initial_guess = np.array([0.5, -0.2, -0.5, -0.2, 0.0, -0.2, 0.5, -0.4, -0.5, -0.4, 0., -0.4])
+            initial_guess = []
+            for n in range(N_free_frequencies):
+                if n % 3 == 0:
+                    factor = 1
+                elif n % 3 == 1:
+                    factor = -1
+                else:
+                    factor = 0.
+                initial_guess += [0.5 * factor, -0.1 * np.ceil((n + 1)/3)]
+            initial_guess = np.array(initial_guess)
 
         QNM_frequencies = []
         for QNM in self.QNMs:
@@ -911,7 +909,7 @@ class QNMModel:
 
         if bounds is None:
             bounds = ([-np.inf, -np.inf], [np.inf, 0])
-
+            
         # run varpro
         try:
             (
