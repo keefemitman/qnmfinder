@@ -1,4 +1,5 @@
 import numpy as np
+import itertools
 
 import sxs
 import scri
@@ -524,20 +525,26 @@ class QNMModelBuilder:
                     if not N in overtone_values:
                         is_valid = False
             else:
-                for i, QNM in enumerate(QNM1.mode):
-                    L1, M1, N1, S1 = QNM
+                overtone_tuples = []
+                for QNM2 in [QNM for QNM in self.QNM_model.QNMs + QNMs if not QNM.is_first_order_QNM and len(QNM.mode) == len(QNM1.mode)]:
+                    if not [(QNM[0], QNM[1], QNM[3]) for QNM in QNM2.mode] == [(QNM[0], QNM[1], QNM[3]) for QNM in QNM1.mode]:
+                        continue
+                    overtone_tuple = []
+                    for QNM in QNM2.mode:
+                        overtone_tuple.append(QNM[2])
+                    overtone_tuples.append(tuple(overtone_tuple))
+
+                print("verify")
+                print(QNM1.mode)
+                print(overtone_tuples)
+                
                     
-                    overtone_values = []
-                    for QNM2 in [
-                            QNM for QNM in self.QNM_model.QNMs + QNMs if not QNM.is_first_order_QNM
-                            and QNM.mode[i][0] == L1 and QNM.mode[i][1] == M1 and QNM.mode[i][3] == S1
-                    ]:
-                        overtone_values.append(QNM2.mode[i][2])
-                    max_overtone_value = max(overtone_values)
-                    
-                    for N in range(max_overtone_value):
-                        if not N in overtone_values:
-                            is_valid = False
+                for overtone_tuple in overtone_tuples:
+                    print(overtone_tuple)
+                    print(list(itertools.product(*[range(i + 1) for i in overtone_tuple])))
+                    print([(x in overtone_tuples) for x in list(itertools.product(*[range(i + 1) for i in overtone_tuple]))])
+                    if not all([(x in overtone_tuples) for x in list(itertools.product(*[range(i + 1) for i in overtone_tuple]))]):
+                        is_valid = False
 
         return is_valid
         
@@ -992,7 +999,7 @@ class QNMModelBuilder:
                 if self.verbose:
                     print(
                         colored(
-                            f"* QNM {[QNM.mode for QNM in QNM_model.QNMs[-self.N_free_frequencies:]]} "
+                            f"* QNM(s) {[QNM.mode for QNM in QNM_model.QNMs[-self.N_free_frequencies:]]} "
                             + "already failed stability; continuing.\n",
                             "red",
                         )
