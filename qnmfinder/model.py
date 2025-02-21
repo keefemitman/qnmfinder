@@ -90,8 +90,8 @@ class QNMModelBuilder:
         [Default: True]
     restrict_higher_order_amplitudes : bool
         whether or not to require that the amplitude of
-        higher order QNMs be smaller than the product of their
-        parent QNMs amplitudes.
+        higher order QNMs be smaller (by a factor of 10)
+        than the product of their parent QNMs amplitudes.
         [Default: True]
     t_ref : float
         reference time (relative to peak) for QNM amplitudes.
@@ -206,7 +206,7 @@ class QNMModelBuilder:
         if not require_1st_order_QNM_existence and restrict_higher_order_amplitudes:
             raise ValueError(
                 f"Can't have require_1st_order_QNM_existence = {require_1st_order_QNM_existence}"
-                + and f"restrict_higher_order_amplitudes = {restrict_higher_order_amplitudes}!"
+                + f"and restrict_higher_order_amplitudes = {restrict_higher_order_amplitudes}!"
             )
 
         self.h_NR = h_NR.copy()
