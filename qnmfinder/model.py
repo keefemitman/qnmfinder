@@ -88,6 +88,11 @@ class QNMModelBuilder:
     exclude_zero_frequency_QNMs : bool
         whether or not to exclude zero frequency QNMs.
         [Default: True]
+    restrict_higher_order_amplitudes : bool
+        whether or not to require that the amplitude of
+        higher order QNMs be smaller than the product of their
+        parent QNMs amplitudes.
+        [Default: True]
     t_ref : float
         reference time (relative to peak) for QNM amplitudes.
         [Default: 0.]
@@ -157,6 +162,7 @@ class QNMModelBuilder:
         include_3rd_order_QNMs=False,
         require_1st_order_QNM_existence=True,
         exclude_zero_frequency_QNMs=True,
+        restrict_higher_order_amplitudes=True,
         t_ref=0.0,
         N_free_frequencies_max=4,
         power_tolerance=1.0e-12,
@@ -195,6 +201,12 @@ class QNMModelBuilder:
                     + "********",
                     "red",
                 )
+            )
+
+        if not require_1st_order_QNM_existence and restrict_higher_order_amplitudes:
+            raise ValueError(
+                f"Can't have require_1st_order_QNM_existence = {require_1st_order_QNM_existence}"
+                + and f"restrict_higher_order_amplitudes = {restrict_higher_order_amplitudes}!"
             )
 
         self.h_NR = h_NR.copy()
@@ -249,6 +261,7 @@ class QNMModelBuilder:
         self.include_3rd_order_QNMs = include_3rd_order_QNMs
         self.require_1st_order_QNM_existence = require_1st_order_QNM_existence
         self.exclude_zero_frequency_QNMs = exclude_zero_frequency_QNMs
+        self.restrict_higher_order_amplitudes = restrict_higher_order_amplitudes
         self.t_ref = t_ref
         self.N_free_frequencies_max = N_free_frequencies_max
         self.power_tolerance = power_tolerance
@@ -837,6 +850,7 @@ class QNMModelBuilder:
                 print(
                     "* new CV(s):",
                 )
+                print()
                 for QNM in QNM_model.QNMs[-d_N_QNMs:]:
                     print(QNM.mode, "->", QNM.CV)
             self.previous_QNM_stable_windows = QNM_stable_windows
@@ -873,6 +887,33 @@ class QNMModelBuilder:
 
             return False, QNM_model
 
+    def are_higher_order_QNMs_reasonable(self, QNM_model):
+        """Check if higher order QNMs are below their parent mode's products.
+
+        Parameters
+        ----------
+        QNM_model : ringdown.QNMModel
+            model of QNMs to check higher order QNMs for.
+        """
+        if QNM_model is None:
+            QNM_model = self.QNM_model
+            
+        first_order_QNMs = [QNM for QNM in QNM_model.QNMs if QNM.is_first_order_QNM]
+        higher_order_QNMs = [QNM for QNM in QNM_model.QNMs if not QNM.is_first_order_QNM]
+
+        for higher_order_QNM in higher_order_QNMs:
+            parent_QNM_As = [QNM.A for QNM in first_order_QNMs if QNM.mode in higher_order_QNM.mode]
+            if abs(higher_order_QNM.A) > 10 * abs(np.product(parent_QNM_As)):
+                if self.verbose:
+                    print(colored("** model failed higher order consistency test:", "red"))
+                    print(f"* {higher_order_QNM.mode} amplitude: {abs(higher_order_QNM.A)}")
+                    print(f"* parent QNMs' amplitude: {abs(np.product(parent_QNM_As))}")
+                    print()
+                
+                return False
+
+        return True
+        
     def build_model(self):
         """Build QNM model."""
         # iterate over fitting start times
@@ -1009,6 +1050,18 @@ class QNMModelBuilder:
                 )
                 t_0 -= self.d_t_0_search
                 continue
+
+            # check if quadratic QNMs have reasonable amplitudes
+            if self.restrict_higher_order_amplitudes:
+                higher_order_QNMs_are_reasonable = self.are_higher_order_QNMs_reasonable(
+                    QNM_model
+                )
+                if not higher_order_QNMs_are_reasonable:
+                    self.failed_QNM_modes.append(
+                        [QNM.mode for QNM in QNM_model.QNMs[-self.N_free_frequencies :]]
+                    )
+                    t_0 -= self.d_t_0_search
+                    continue
 
             print(colored(f"** new model is", "green"))
             for QNM in QNM_model.QNMs:
