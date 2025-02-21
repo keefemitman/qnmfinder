@@ -562,9 +562,11 @@ class QNMModel:
                 pass
 
         if not integrated:
-            colored(
-                "********\n" + "Warning: no amplitude data to change.\n" + "********",
-                "red",
+            print(
+                colored(
+                    "********\n" + "Warning: no amplitude data to change.\n" + "********",
+                    "red",
+                )
             )
 
         return QNM_model
