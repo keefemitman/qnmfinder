@@ -533,16 +533,8 @@ class QNMModelBuilder:
                     for QNM in QNM2.mode:
                         overtone_tuple.append(QNM[2])
                     overtone_tuples.append(tuple(overtone_tuple))
-
-                print("verify")
-                print(QNM1.mode)
-                print(overtone_tuples)
-                
                     
                 for overtone_tuple in overtone_tuples:
-                    print(overtone_tuple)
-                    print(list(itertools.product(*[range(i + 1) for i in overtone_tuple])))
-                    print([(x in overtone_tuples) for x in list(itertools.product(*[range(i + 1) for i in overtone_tuple]))])
                     if not all([(x in overtone_tuples) for x in list(itertools.product(*[range(i + 1) for i in overtone_tuple]))]):
                         is_valid = False
 
