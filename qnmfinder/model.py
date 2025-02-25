@@ -55,7 +55,7 @@ class QNMModelBuilder:
         [Default: 2]
     ell_max_NR : int
         maximum QNM \ell value to consider.
-        [Default: 4]
+        [Default: 6]
     modes : list
         (\ell, m) modes of NR waveform to fit.
         [Default: use all modes.]
@@ -83,7 +83,7 @@ class QNMModelBuilder:
         [Default: False]
     require_1st_order_QNM_existence : bool
         require 1st order QNM to exist in model to be considered
-        as a component of a 2nd order QNM.
+        as a component of a higher order QNM.
         [Default: True]
     exclude_zero_frequency_QNMs : bool
         whether or not to exclude zero frequency QNMs.
@@ -107,14 +107,14 @@ class QNMModelBuilder:
         [Default: 2.e-1]
     CV_tolerance : float
         minimum coefficient of variation to QNM to be considered stable.
-        [Default: 5.e-2]
+        [Default: 2.e-1]
     min_t_0_window : float
         minimum window over fitting start times to consider.
         [Default: -np.log(min_t_0_window_factor) / QNM.omega.imag.]
     min_t_0_window_factor : float
         factor by which to change the minimum stable window;
         this corresponds to the amount the amplitude should decay over the window.
-        [Default: 10.0]
+        [Default: 100.0]
     min_A_tolerance : float
         minimum amplitude to consider during stability tests.
         [Default: 1.e-12.]
@@ -151,7 +151,7 @@ class QNMModelBuilder:
         d_t_0=1.0,
         d_t_0_search=1.0,
         ell_min_NR=2,
-        ell_max_NR=4,
+        ell_max_NR=6,
         modes=None,
         fit_news=True,
         ell_min_QNM=2,
@@ -167,9 +167,9 @@ class QNMModelBuilder:
         N_free_frequencies_max=4,
         power_tolerance=1.0e-12,
         frequency_tolerance=2.0e-1,
-        CV_tolerance=5.0e-2,
+        CV_tolerance=2.0e-1,
         min_t_0_window=None,
-        min_t_0_window_factor=10.0,
+        min_t_0_window_factor=100.0,
         min_A_tolerance=1e-12,
         reset_after_adding_QNM=True,
         preexisting_model=None,
@@ -206,7 +206,7 @@ class QNMModelBuilder:
         if not require_1st_order_QNM_existence and restrict_higher_order_amplitudes:
             raise ValueError(
                 f"Can't have require_1st_order_QNM_existence = {require_1st_order_QNM_existence}"
-                + f"and restrict_higher_order_amplitudes = {restrict_higher_order_amplitudes}!"
+                + f" and restrict_higher_order_amplitudes = {restrict_higher_order_amplitudes}!"
             )
 
         self.h_NR = h_NR.copy()
