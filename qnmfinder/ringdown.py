@@ -539,37 +539,38 @@ class QNMModel:
         """
         QNM_model = self.copy()
 
+        if integration_number == 0:
+            return QNM_model
+
         integrated = False
         for QNM in QNM_model.QNMs:
-            try:
-                QNM.A = QNM.A / (-1j * QNM.omega) ** integration_number
-                integrated = True
-            except:
-                pass
+            if integration_number > 0:
+                QNM.A = QNM.A / (-1j * QNM.omega)
 
-            try:
-                QNM.A_std = QNM.A_std / abs((-1j * QNM.omega) ** integration_number)
-                integrated = True
-            except:
-                pass
+                QNM.A_std = 1/abs(QNM.omega)**2 * (
+                    np.sqrt((QNM.A_std.real * QNM.omega.imag)**2 + (QNM.A_std.imag * QNM.omag.real)**2)
+                    + 1j * np.sqrt((QNM.A_std.real * QNM.omega.real)**2 + (QNM.A_std.imag * QNM.omag.imag)**2)
+                )
 
-            try:
                 QNM.A_time_series = (
-                    QNM.A_time_series / (-1j * QNM.omega) ** integration_number
+                    QNM.A_time_series / (-1j * QNM.omega)
                 )
-                integrated = True
-            except:
-                pass
+            else:
+                QNM.A = QNM.A * (-1j * QNM.omega)
 
-        if not integrated:
-            print(
-                colored(
-                    "********\n" + "Warning: no amplitude data to change.\n" + "********",
-                    "red",
+                QNM.A_std = (
+                    np.sqrt((QNM.A_std.real * QNM.omega.imag)**2 + (QNM.A_std.imag * QNM.omag.real)**2)
+                    + 1j * np.sqrt((QNM.A_std.real * QNM.omega.real)**2 + (QNM.A_std.imag * QNM.omag.imag)**2)
                 )
-            )
+                
+                QNM.A_time_series = (
+                    QNM.A_time_series * (-1j * QNM.omega)
+                )
 
-        return QNM_model
+        if integration_number > 0:
+            return QNM_model.integrate(integration_number - 1)
+        else:
+            return QNM_model.integrate(integration_number + 1)
 
     def analyze_model_time_series(
         self, CV_tolerance=2.0e-2, min_t_0_window=None, min_t_0_window_factor=10.0, min_A_tolerance=0.
