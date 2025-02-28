@@ -547,25 +547,37 @@ class QNMModel:
             if integration_number > 0:
                 QNM.A = QNM.A / (-1j * QNM.omega)
 
-                QNM.A_std = 1/abs(QNM.omega)**2 * (
-                    np.sqrt((QNM.A_std.real * QNM.omega.imag)**2 + (QNM.A_std.imag * QNM.omag.real)**2)
-                    + 1j * np.sqrt((QNM.A_std.real * QNM.omega.real)**2 + (QNM.A_std.imag * QNM.omag.imag)**2)
-                )
+                try:
+                    QNM.A_std = 1/abs(QNM.omega)**2 * (
+                        np.sqrt((QNM.A_std.real * QNM.omega.imag)**2 + (QNM.A_std.imag * QNM.omag.real)**2)
+                        + 1j * np.sqrt((QNM.A_std.real * QNM.omega.real)**2 + (QNM.A_std.imag * QNM.omag.imag)**2)
+                    )
+                except:
+                    pass
 
-                QNM.A_time_series = (
-                    QNM.A_time_series / (-1j * QNM.omega)
-                )
+                try:
+                    QNM.A_time_series = (
+                        QNM.A_time_series / (-1j * QNM.omega)
+                    )
+                except:
+                    pass
             else:
                 QNM.A = QNM.A * (-1j * QNM.omega)
 
-                QNM.A_std = (
-                    np.sqrt((QNM.A_std.real * QNM.omega.imag)**2 + (QNM.A_std.imag * QNM.omag.real)**2)
-                    + 1j * np.sqrt((QNM.A_std.real * QNM.omega.real)**2 + (QNM.A_std.imag * QNM.omag.imag)**2)
-                )
-                
-                QNM.A_time_series = (
-                    QNM.A_time_series * (-1j * QNM.omega)
-                )
+                try:
+                    QNM.A_std = (
+                        np.sqrt((QNM.A_std.real * QNM.omega.imag)**2 + (QNM.A_std.imag * QNM.omag.real)**2)
+                        + 1j * np.sqrt((QNM.A_std.real * QNM.omega.real)**2 + (QNM.A_std.imag * QNM.omag.imag)**2)
+                    )
+                except:
+                    pass
+
+                try:
+                    QNM.A_time_series = (
+                        QNM.A_time_series * (-1j * QNM.omega)
+                    )
+                except:
+                    pass
 
         if integration_number > 0:
             return QNM_model.integrate(integration_number - 1)
