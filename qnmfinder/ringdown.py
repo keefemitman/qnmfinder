@@ -549,8 +549,8 @@ class QNMModel:
 
                 try:
                     QNM.A_std = 1/abs(QNM.omega)**2 * (
-                        np.sqrt((QNM.A_std.real * QNM.omega.imag)**2 + (QNM.A_std.imag * QNM.omag.real)**2)
-                        + 1j * np.sqrt((QNM.A_std.real * QNM.omega.real)**2 + (QNM.A_std.imag * QNM.omag.imag)**2)
+                        np.sqrt((QNM.A_std.real * QNM.omega.imag)**2 + (QNM.A_std.imag * QNM.omega.real)**2)
+                        + 1j * np.sqrt((QNM.A_std.real * QNM.omega.real)**2 + (QNM.A_std.imag * QNM.omega.imag)**2)
                     )
                 except:
                     pass
@@ -566,8 +566,8 @@ class QNMModel:
 
                 try:
                     QNM.A_std = (
-                        np.sqrt((QNM.A_std.real * QNM.omega.imag)**2 + (QNM.A_std.imag * QNM.omag.real)**2)
-                        + 1j * np.sqrt((QNM.A_std.real * QNM.omega.real)**2 + (QNM.A_std.imag * QNM.omag.imag)**2)
+                        np.sqrt((QNM.A_std.real * QNM.omega.imag)**2 + (QNM.A_std.imag * QNM.omega.real)**2)
+                        + 1j * np.sqrt((QNM.A_std.real * QNM.omega.real)**2 + (QNM.A_std.imag * QNM.omega.imag)**2)
                     )
                 except:
                     pass
