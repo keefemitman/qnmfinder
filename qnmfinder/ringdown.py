@@ -871,7 +871,7 @@ class QNMModel:
             [Default: 0]
         initial_guess : list
             initial guesses for free frequencies.
-            [Default: [0.5, -0.2] * N_free_frequencies.
+            [Default: rectangularly spaced in the complex plane]
         bounds : list
             bounds for free frequencies.
             [Default: [(-np.inf, np.inf), (-np.inf, 0)] * N_free_frequencies]
@@ -1023,7 +1023,7 @@ class QNMModel:
             [Default: 0]
         initial_guess : list
             initial guesses for varpro free frequencies.
-            [Default: [0.5, -0.2] * N_free_frequencies.
+            [Default: rectangularly spaced in the complex plane]
         bounds : list
             bounds for varpro free frequencies.
             [Default: [(-np.inf, np.inf), (-np.inf, 0)] * N_free_frequencies]

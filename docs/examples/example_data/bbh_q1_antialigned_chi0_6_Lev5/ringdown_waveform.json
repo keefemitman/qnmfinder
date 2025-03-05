@@ -11,21 +11,21 @@
   "version_info": {
     "python": "3.9.18 | packaged by conda-forge | (main, Dec 23 2023, 16:33:10) \n[GCC 12.3.0]",
     "numpy": "1.26.4",
-    "scipy": "1.13.0",
+    "scipy": "1.13.1",
     "h5py": "3.11.0",
     "numba": "0.60.0",
-    "quaternion": "2023.0.3",
+    "quaternion": "2023.0.4",
     "spherical_functions": "2022.4.3",
     "spinsfast": "2022.4.5",
     "scri": "2022.9.0",
     "quaternionic": "1.0.12",
-    "spherical": "1.0.14",
-    "sxs": "2023.2.0"
+    "spherical": "1.0.15",
+    "sxs": "2024.0.27"
   },
   "validation": {
-    "h5_file_size": 882274,
-    "n_times": 2696,
-    "md5sum": "1e63b5d21d774cfbadddda5fa233e025"
+    "h5_file_size": 929067,
+    "n_times": 2982,
+    "md5sum": "a3bcac20e70e68ce974271ae4c270b1a"
   },
   "modifications": {
     "truncate": {
