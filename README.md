@@ -1,7 +1,7 @@
 # qnmfinder
 A reverse search algorithm for finding QNMs in the ringdown of NR waveforms that utilizes variable projection for free frequency fits and leverages stable complex amplitudes for constructing a physical ringdown model.
 
-This algorithm was developed for the work presented in [arXiv:XXXX]().
+This algorithm was developed for the work presented in [arXiv:2503.09678](https://arxiv.org/abs/2503.09678).
 
 A rough schematic of the algorithm can be seen below: 
 
