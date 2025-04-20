@@ -904,7 +904,7 @@ class QNMModelBuilder:
         for higher_order_QNM in higher_order_QNMs:
             parent_QNM_As = [QNM.A for QNM in first_order_QNMs if QNM.mode in higher_order_QNM.mode]
             # factor of 100 to be lenient
-            if abs(higher_order_QNM.A) > 100 * 0.1 ** (len(higher_order_QNM.mode) - 1) * abs(np.product(parent_QNM_As)):
+            if abs(higher_order_QNM.A) > 100 * 0.1 ** (len(higher_order_QNM.mode) - 1) * abs(np.prod(parent_QNM_As)):
                 if self.verbose:
                     print(colored("** model failed higher order consistency test:", "red"))
                     print(f"* {higher_order_QNM.mode} amplitude: {abs(higher_order_QNM.A)}")
