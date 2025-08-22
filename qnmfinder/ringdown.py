@@ -9,7 +9,7 @@ import joblib
 import numpy as np
 
 import qnm
-from scri.sample_waveforms import modes_constructor
+import scri
 
 from . import utils
 from . import varpro
@@ -676,7 +676,7 @@ class QNMModel:
             waveform corresponding to self.QNMs.
         """
 
-        data = np.zeros_like(h_template.data, dtype=complex)
+        data = np.zeros(h_template.data.shape, dtype=complex)
 
         self.compute_omegas_and_Cs()
         for QNM in self.QNMs:
@@ -706,17 +706,17 @@ class QNMModel:
         return h_QNM
 
     def fit_LLSQ(
-        self,
-        h_NR,
-        modes=None,
-        t_i=0.0,
-        t_f=100.0,
-        t_ref=0.0,
-        compute_fit_errors=False,
-        return_h_NR_fitted=False,
+            self,
+            h_NR,
+            modes=None,
+            t_i=0.0,
+            t_f=100.0,
+            t_ref=0.0,
+            compute_fit_errors=False,
+            return_h_NR_fitted=False,
     ):
         """Fit QNM model to an NR waveform via linear-least squares.
-
+        
         Parameters
         ----------
         h_NR : scri.WaveformModes
@@ -748,14 +748,14 @@ class QNMModel:
             NR waveform that was fit.
         """
         fit_QNM_model = self.copy()
-
-        h_NR_fitted = h_NR.copy()[
+        
+        h_NR_fitted = h_NR[
             np.argmin(abs(h_NR.t - t_i)) : np.argmin(abs(h_NR.t - t_f)) + 1
         ]
         dt = h_NR_fitted.t[0]
         h_NR_fitted.t -= dt
         t_ref -= dt
-
+        
         m_list = []
         [
             m_list.append(m)
@@ -768,7 +768,7 @@ class QNMModel:
             QNMs_matching_m = [
                 (i, QNM) for i, QNM in enumerate(self.QNMs) if QNM.target_mode[1] == m
             ]
-
+            
             # restrict the modes included in the least squares fit to the modes of interest.
             ell_min_m = h_NR_fitted.ell_min
             ell_max_m = h_NR_fitted.ell_max
@@ -784,44 +784,43 @@ class QNMModel:
                 ]
                 ell_min_m = min(np.array([_l for (_l, _m) in modes if m == _m]))
                 ell_max_m = max(np.array([_l for (_l, _m) in modes if m == _m]))
-
+                
             A = np.zeros((h_NR_fitted.t.size, ell_max_m - ell_min_m + 1), dtype=complex)
             B = np.zeros(
                 (h_NR_fitted.t.size, ell_max_m - ell_min_m + 1, len(QNMs_matching_m)),
                 dtype=complex,
             )
-
-            h_NR_fitted_kurt = h_NR_fitted[:, : ell_max_m + 1]
-            A = h_NR_fitted_kurt.data[:, data_index_m]
+            
+            A = h_NR_fitted.data[:, : h_NR_fitted.index(ell_max_m + 1, ell_max_m + 1)][:, data_index_m]
             for mode_index, (i, QNM) in enumerate(QNMs_matching_m):
                 QNM_w_unit_A = QNM.copy()
                 QNM_w_unit_A.A = 1.0
-
+                
                 QNM_model_w_unit_A = QNMModel(self.M_f, self.chi_f, [QNM_w_unit_A])
-
+                
                 h_QNM = QNM_model_w_unit_A.compute_waveform(
-                    h_NR_fitted_kurt, t_ref=t_ref
+                    h_NR_fitted, t_ref=t_ref
                 )
                 
                 B[:, :, mode_index] = h_QNM.data[:, data_index_m]
-
-            A = np.reshape(A, h_NR_fitted_kurt.t.size * (ell_max_m - ell_min_m + 1))
+                
+            A = np.reshape(A, h_NR_fitted.t.size * (ell_max_m - ell_min_m + 1))
             B = np.reshape(
                 B,
                 (
-                    h_NR_fitted_kurt.t.size * (ell_max_m - ell_min_m + 1),
+                    h_NR_fitted.t.size * (ell_max_m - ell_min_m + 1),
                     len(QNMs_matching_m),
                 ),
             )
             C = np.linalg.lstsq(B, A, rcond=None)
-
+            
             count = 0
             for i, QNM in QNMs_matching_m:
                 fit_QNM_model.QNMs[i].A = C[0][count]
                 count += 1
-
+                
         h_NR_fitted.t += dt
-
+        
         if compute_fit_errors:
             h_QNM = fit_QNM_model.compute_waveform(h_NR_fitted)
             fit_QNM_model.L2_norm = utils.compute_L2_norm(
@@ -830,12 +829,12 @@ class QNMModel:
             fit_QNM_model.mismatch = utils.compute_mismatch(
                 h_NR_fitted, h_QNM, modes=modes
             )
-
+            
         if return_h_NR_fitted:
             return fit_QNM_model, h_NR_fitted
         else:
             return fit_QNM_model
-
+    
     def fit_varpro(
         self,
         h_NR,
