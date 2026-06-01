@@ -76,7 +76,7 @@ def omega_and_C(mode, target_mode, M_f, chi_f):
 
 
 def compute_stable_window(
-    QNM, t_0s, CV_tolerance=2.0e-2, min_t_0_window=None, min_t_0_window_factor=10.0, min_A_tolerance=0.
+    QNM, t_0s, CV_tolerance=2.0e-2, min_t_0_window=None, min_t_0_window_factor=100.0, min_A_tolerance=0.
 ):
     """Find the largest stable window that meets self.CV_tolerance.
 
@@ -95,7 +95,7 @@ def compute_stable_window(
     min_t_0_window_factor : float
         factor by which to change the minimum stable window;
         this corresponds to the amount the amplitude should decay over the window.
-        [Default: 10.0]
+        [Default: 100.0]
     min_A_tolerance : float
         minimum amplitude to consider physical.
         [Default: 0.]
@@ -110,7 +110,7 @@ def compute_stable_window(
     min_CV = np.inf
     best_window = (0.0, 0.0)
 
-    min_A_tolerance_idx = np.argmin(abs(abs(QNM.A_time_series * np.exp(-1j * QNM.omega * t_0s)) - min_A_tolerance)) + 1
+    min_A_tolerance_idx = np.max(np.flatnonzero(abs(QNM.A_time_series * np.exp(-1j * QNM.omega * t_0s)) > min_A_tolerance), initial=-1) + 1
 
     d_window_size = np.diff(t_0s)[0]
     if min_t_0_window is None:
@@ -585,7 +585,7 @@ class QNMModel:
             return QNM_model.integrate(integration_number + 1)
 
     def analyze_model_time_series(
-        self, CV_tolerance=2.0e-2, min_t_0_window=None, min_t_0_window_factor=10.0, min_A_tolerance=0.
+        self, CV_tolerance=2.0e-2, min_t_0_window=None, min_t_0_window_factor=100.0, min_A_tolerance=0.
     ):
         """Analyze time series data of model, i.e.,
            find the largest stable window for each QNM
@@ -602,7 +602,7 @@ class QNMModel:
         min_t_0_window_factor : float
             factor by which to change the minimum stable window;
             this corresponds to the amount the amplitude should decay over the window.
-            [Default: 10.0]
+            [Default: 100.0]
         min_A_tolerance : float
             minimum amplitude to consider physical.
             [Default: 0.]

@@ -61,7 +61,7 @@ class QNMModelBuilder:
         [Default: use all modes.]
     fit_news : bool
         fit the news instead of the strain;
-        returned amplitudes will still be for the strain.
+        returned amplitudes will be for the news.
         [Default: True]
     ell_min_QNM : int
         minimum QNM \ell value to consider.
@@ -117,7 +117,7 @@ class QNMModelBuilder:
         [Default: 100.0]
     min_A_tolerance : float
         minimum amplitude to consider during stability tests.
-        [Default: 1.e-12.]
+        [Default: 0.0]
     reset_after_adding_QNM : bool
         whether or not to reset the fitting start time iteration
         after successfully adding a new QNM to the model.
@@ -170,7 +170,7 @@ class QNMModelBuilder:
         CV_tolerance=2.0e-1,
         min_t_0_window=None,
         min_t_0_window_factor=100.0,
-        min_A_tolerance=1e-12,
+        min_A_tolerance=0.0,
         reset_after_adding_QNM=True,
         preexisting_model=None,
         n_procs="auto",
